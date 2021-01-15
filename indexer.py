@@ -75,7 +75,7 @@ async def run_event_handler(pg_pool, handler_method, message):
         await handler_method(pg_conn, message)
 
 
-async def indexer(config):
+async def indexer(config, maxwait):
     sleep_amount = 1 # seconds
 
     async with \
@@ -115,11 +115,12 @@ async def indexer(config):
                 '''), MAX_ATTEMPTS)
 
                 # Reset `sleep_amount` if we're seeing activity, otherwise
-                # increase it exponentially.
+                # increase it exponentially up to `maxwait` seconds.
                 if event:
                     sleep_amount = 1
                 else:
-                    sleep_amount *= 2
+                    if sleep_amount < maxwait:
+                        sleep_amount = min(sleep_amount * 2, maxwait)
                     continue
 
                 logging.info('Processing event %s', event)
@@ -169,6 +170,11 @@ def main():
                             help='enable debug mode',
                             dest='debug',
                             action='store_true')
+    arg_parser.add_argument('--max-wait',
+                            help='max poll timeout',
+                            dest='maxwait',
+                            type=int,
+                            default=32)
     args = arg_parser.parse_args()
 
     logger = logging.getLogger()
@@ -188,7 +194,7 @@ def main():
 
     loop = asyncio.get_event_loop()
     try:
-        loop.run_until_complete(indexer(config))
+        loop.run_until_complete(indexer(config, args.maxwait))
     except KeyboardInterrupt:
         pass
     finally:
