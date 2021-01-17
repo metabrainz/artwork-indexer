@@ -24,6 +24,7 @@ import logging
 import signal
 import traceback
 from collections import deque
+from functools import partial
 from textwrap import dedent
 
 import aiohttp
@@ -87,6 +88,21 @@ async def indexer(config, maxwait):
             for entity, cls in EVENT_HANDLER_CLASSES.items()
         }
 
+        def task_done(event, task):
+            task_exc = task.exception()
+            if task_exc:
+                asyncio.create_task(log_failure_reason(
+                    pg_pool,
+                    event,
+                    task_exc,
+                ))
+            else:
+                logging.debug(
+                    'Event id=%s finished succesfully',
+                    event['id'],
+                )
+                asyncio.create_task(delete_event(pg_pool, event))
+
         while True:
             logging.debug('Sleeping for %s second(s)', sleep_amount)
 
@@ -139,27 +155,12 @@ async def indexer(config, maxwait):
                 except BaseException as e:
                     await log_failure_reason(pg_conn, event, e)
 
-                def task_done(task):
-                    task_exc = task.exception()
-                    if task_exc:
-                        asyncio.create_task(log_failure_reason(
-                            pg_pool,
-                            event,
-                            task_exc,
-                        ))
-                    else:
-                        logging.debug(
-                            'Event id=%s finished succesfully',
-                            event['id'],
-                        )
-                        asyncio.create_task(delete_event(pg_pool, event))
-
                 task = asyncio.create_task(run_event_handler(
                     pg_pool,
                     getattr(handler, event['action']),
                     message,
                 ))
-                task.add_done_callback(task_done)
+                task.add_done_callback(partial(task_done, event))
 
 
 def main():
