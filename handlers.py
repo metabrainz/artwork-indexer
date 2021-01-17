@@ -95,6 +95,9 @@ class EventHandler:
     def build_metadata_url(self, gid):
         raise NotImplementedError
 
+    def build_metadata_headers(self):
+        raise NotImplementedError
+
     def build_s3_item_url(self, gid, filename):
         url = self.config['s3']['url']
         bucket = self.build_bucket_name(gid)
@@ -140,8 +143,11 @@ class EventHandler:
         )
 
         entity_metadata_url = self.build_metadata_url(gid)
+        entity_metadata_headers = self.build_metadata_headers()
 
-        async with self.http_session.get(entity_metadata_url) as response:
+        async with self.http_session.get(entity_metadata_url,
+                                         headers=entity_metadata_headers) \
+                as response:
             entity_metadata = await response.text()
             await self.http_session.put(
                 self.build_s3_item_url(
@@ -273,6 +279,13 @@ class MusicBrainzEventHandler(EventHandler):
             inc=self.ws_inc_params,
         )
         return urllib.parse.urlunparse(mb_url._replace(path=xmlws_path))
+
+    def build_metadata_headers(self):
+        headers = {}
+        database = self.config['musicbrainz'].get('database')
+        if database:
+            headers['mb-set-database'] = database
+        return headers
 
     async def fetch_entity_row(self, pg_conn, mbid):
         entity_type = self.entity_type
