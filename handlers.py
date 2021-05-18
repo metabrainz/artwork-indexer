@@ -196,7 +196,8 @@ class EventHandler:
                 'x-archive-auto-make-bucket': '1',
                 'x-archive-keep-old-version': '1',
                 'x-archive-meta-collection': self.ia_collection,
-                'x-archive-meta-mediatype': 'images',
+                'x-archive-meta-mediatype': 'image',
+                'x-archive-meta-noindex': 'true',
             },
         )
         await self.http_session.delete(
@@ -204,6 +205,7 @@ class EventHandler:
             headers={
                 **self.build_authorization_header(),
                 'x-archive-keep-old-version': '1',
+                'x-archive-cascade-delete': '1',
             },
         )
 
@@ -220,6 +222,7 @@ class EventHandler:
             headers={
                 **self.build_authorization_header(),
                 'x-archive-keep-old-version': '1',
+                'x-archive-cascade-delete': '1',
             },
         )
 
@@ -229,6 +232,7 @@ class EventHandler:
             headers={
                 **self.build_authorization_header(),
                 'x-archive-keep-old-version': '1',
+                'x-archive-cascade-delete': '1',
             },
         )
 
