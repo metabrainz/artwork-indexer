@@ -31,7 +31,8 @@ CREATE TABLE event_queue (
     -- means that `last_attempted` may be set from a previous failure
     -- even if `attempts` is 0.
     attempts            SMALLINT NOT NULL DEFAULT 0,
-    last_attempted      TIMESTAMP WITH TIME ZONE
+    last_attempted      TIMESTAMP WITH TIME ZONE,
+    last_updated        TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE event_failure_reason (
@@ -66,6 +67,7 @@ BEGIN
     IF NEW.attempts > OLD.attempts THEN
         NEW.last_attempted = NOW();
     END IF;
+    NEW.last_updated = NOW();
     RETURN NEW;
 END;
 $$ LANGUAGE 'plpgsql';
