@@ -60,4 +60,18 @@ CREATE UNIQUE INDEX event_queue_idx_uniq
 CREATE INDEX event_failure_reason_idx_event
     ON event_failure_reason (event, created);
 
+CREATE OR REPLACE FUNCTION b_upd_event_queue()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.attempts > OLD.attempts THEN
+        NEW.last_attempted = NOW();
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE 'plpgsql';
+
+CREATE TRIGGER b_upd_event_queue
+    BEFORE UPDATE ON event_queue
+    FOR EACH ROW EXECUTE FUNCTION b_upd_event_queue();
+
 COMMIT;

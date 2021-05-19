@@ -143,8 +143,7 @@ async def indexer(config, maxwait):
 
                 await pg_conn.execute(dedent('''
                     UPDATE artwork_indexer.event_queue
-                    SET attempts = attempts + 1,
-                        last_attempted = now()
+                    SET attempts = attempts + 1
                     WHERE id = $1
                 '''), event['id'])
 
