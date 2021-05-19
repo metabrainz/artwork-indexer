@@ -37,7 +37,7 @@ from handlers import (
 
 # Maximum number of times we should try to handle an event
 # before we give up. This works together with the `attempts`
-# column in the `artwork_indexer.index_queue` table. Events
+# column in the `artwork_indexer.event_queue` table. Events
 # that reach this number of attempts will be skipped for
 # processing and require manual intervention; start by
 # inspecting the `failure_reason`.
@@ -54,7 +54,7 @@ async def log_failure_reason(conn, event, error):
     logging.error(''.join(traceback.format_tb(error.__traceback__)))
 
     await conn.execute(dedent('''
-        UPDATE artwork_indexer.index_queue
+        UPDATE artwork_indexer.event_queue
         SET failure_reason = $1
         WHERE id = $2
     '''), str(error), event['id'])
@@ -64,7 +64,7 @@ async def delete_event(conn, event):
     logging.debug('Deleting event id=%s', event['id'])
 
     await conn.execute(dedent('''
-        DELETE FROM artwork_indexer.index_queue
+        DELETE FROM artwork_indexer.event_queue
         WHERE id = $1
     '''), event['id'])
 
@@ -118,7 +118,7 @@ async def indexer(config, maxwait):
                 # time interval. We start by waiting 30 minutes, and
                 # double the amount of time after each attempt.
                 event = await pg_conn.fetchrow(dedent('''
-                    SELECT * FROM artwork_indexer.index_queue
+                    SELECT * FROM artwork_indexer.event_queue
                     WHERE attempts < $1
                     AND (
                         last_attempted IS NULL
@@ -142,7 +142,7 @@ async def indexer(config, maxwait):
                 logging.info('Processing event %s', event)
 
                 await pg_conn.execute(dedent('''
-                    UPDATE artwork_indexer.index_queue
+                    UPDATE artwork_indexer.event_queue
                     SET attempts = attempts + 1,
                         last_attempted = now()
                     WHERE id = $1

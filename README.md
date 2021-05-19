@@ -1,6 +1,6 @@
 # artwork-indexer
 
-A daemon that watches the `artwork_indexer.index_queue` table for events,
+A daemon that watches the `artwork_indexer.event_queue` table for events,
 and updates relevant
 [index.json files and other metadata](https://archive.org/download/mbid-59105e60-a6f7-4a86-aaab-2c4f02ddb4f8)
 at the Internet Archive.
