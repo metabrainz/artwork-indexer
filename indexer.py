@@ -40,7 +40,7 @@ from handlers import (
 # column in the `artwork_indexer.event_queue` table. Events
 # that reach this number of attempts will be skipped for
 # processing and require manual intervention; start by
-# inspecting the `failure_reason`.
+# inspecting the `event_failure_reason` table.
 MAX_ATTEMPTS = 5
 
 EVENT_HANDLER_CLASSES = {
@@ -54,10 +54,10 @@ async def log_failure_reason(conn, event, error):
     logging.error(''.join(traceback.format_tb(error.__traceback__)))
 
     await conn.execute(dedent('''
-        UPDATE artwork_indexer.event_queue
-        SET failure_reason = $1
-        WHERE id = $2
-    '''), str(error), event['id'])
+        INSERT INTO artwork_indexer.event_failure_reason
+            (event, failure_reason)
+        VALUES ($1, $2)
+    '''), event['id'], str(error))
 
 
 async def delete_event(conn, event):

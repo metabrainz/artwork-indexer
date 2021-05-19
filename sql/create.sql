@@ -28,16 +28,27 @@ CREATE TABLE event_queue (
     -- events be unique, the `ON CONFLICT` action for external triggers
     -- should be `DO UPDATE SET attempts = 0` in order to revive dead
     -- events that have reached their maximum number of attempts. This
-    -- means that `last_attempted` and `failure_reason` may be set from
-    -- a previous failure even if `attempts` is 0.
+    -- means that `last_attempted` may be set from a previous failure
+    -- even if `attempts` is 0.
     attempts            SMALLINT NOT NULL DEFAULT 0,
-    last_attempted      TIMESTAMP WITH TIME ZONE,
-    failure_reason      TEXT
+    last_attempted      TIMESTAMP WITH TIME ZONE
+);
+
+CREATE TABLE event_failure_reason (
+    event               BIGINT NOT NULL,
+    failure_reason      TEXT NOT NULL,
+    created             TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
 ALTER TABLE event_queue
     ADD CONSTRAINT event_queue_okey
     PRIMARY KEY (id);
+
+ALTER TABLE event_failure_reason
+    ADD CONSTRAINT event_failure_reason_fk_event
+    FOREIGN KEY (event)
+    REFERENCES event_queue(id)
+    ON DELETE CASCADE;
 
 -- MusicBrainz Server will sometimes publish the same message multiple
 -- times due to its SQL triggers firing for the same release (or event)
@@ -45,5 +56,8 @@ ALTER TABLE event_queue
 -- index events be unique.
 CREATE UNIQUE INDEX event_queue_idx_uniq
     ON event_queue (entity_type, action, message);
+
+CREATE INDEX event_failure_reason_idx_event
+    ON event_failure_reason (event, created);
 
 COMMIT;
