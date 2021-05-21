@@ -42,7 +42,7 @@ CREATE TABLE event_failure_reason (
 );
 
 ALTER TABLE event_queue
-    ADD CONSTRAINT event_queue_okey
+    ADD CONSTRAINT event_queue_pkey
     PRIMARY KEY (id);
 
 ALTER TABLE event_failure_reason
