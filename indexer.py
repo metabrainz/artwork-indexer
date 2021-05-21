@@ -21,6 +21,7 @@ import asyncio
 import configparser
 import json
 import logging
+import re
 import signal
 import traceback
 from collections import deque
@@ -49,9 +50,25 @@ EVENT_HANDLER_CLASSES = {
 }
 
 
-async def log_failure_reason(conn, event, error):
+async def handle_event_failure(conn, event, error):
     logging.error(error)
     logging.error(''.join(traceback.format_tb(error.__traceback__)))
+
+    await conn.execute(dedent('''
+        UPDATE artwork_indexer.event_queue eq
+        SET state = (
+            CASE WHEN eq.attempts >= $2 OR EXISTS (
+                SELECT 1
+                FROM artwork_indexer.event_queue dup
+                WHERE dup.state = 'queued'
+                AND dup.action = eq.action
+                AND dup.message = eq.message
+                AND dup.id != $1
+                FOR UPDATE
+            ) THEN 'failed' ELSE 'queued' END
+        )::artwork_indexer.event_state
+        WHERE eq.id = $1
+    '''), event['id'], MAX_ATTEMPTS)
 
     await conn.execute(dedent('''
         INSERT INTO artwork_indexer.event_failure_reason
@@ -60,13 +77,27 @@ async def log_failure_reason(conn, event, error):
     '''), event['id'], str(error))
 
 
-async def delete_event(conn, event):
-    logging.debug('Deleting event id=%s', event['id'])
-
+async def complete_event(conn, event):
     await conn.execute(dedent('''
-        DELETE FROM artwork_indexer.event_queue
+        UPDATE artwork_indexer.event_queue
+        SET state = 'completed'
         WHERE id = $1
     '''), event['id'])
+
+
+async def cleanup_events(pg_pool):
+    deletion_tag = await pg_pool.execute(dedent('''
+        DELETE FROM artwork_indexer.event_queue
+        WHERE (now() - created) > interval '90 days'
+    '''))
+    deletion_count_match = re.match(r'DELETE ([0-9]+)', deletion_tag)
+    if deletion_count_match:
+        deletion_count = int(deletion_count_match[1])
+        if deletion_count:
+            logging.debug(
+                'Deleted ' + str(deletion_count) + ' event' + \
+                ('s' if deletion_count > 1 else '') + \
+                ' older than 90 days')
 
 
 async def run_event_handler(pg_pool, handler_method, message):
@@ -91,7 +122,7 @@ async def indexer(config, maxwait):
         def task_done(event, task):
             task_exc = task.exception()
             if task_exc:
-                asyncio.create_task(log_failure_reason(
+                asyncio.create_task(handle_event_failure(
                     pg_pool,
                     event,
                     task_exc,
@@ -101,7 +132,7 @@ async def indexer(config, maxwait):
                     'Event id=%s finished succesfully',
                     event['id'],
                 )
-                asyncio.create_task(delete_event(pg_pool, event))
+                asyncio.create_task(complete_event(pg_pool, event))
 
         while True:
             logging.debug('Sleeping for %s second(s)', sleep_amount)
@@ -113,19 +144,17 @@ async def indexer(config, maxwait):
                 pg_conn.transaction():
 
                 # Skip events that have reached `MAX_ATTEMPTS`.
-                # In other cases, `last_attempted` should either be
-                # NULL before the first attempt, or within a specific
-                # time interval. We start by waiting 30 minutes, and
-                # double the amount of time after each attempt.
+                # In other cases, `last_updated` should be within a
+                # specific time interval. We start by waiting 30
+                # minutes, and double the amount of time after each
+                # attempt.
                 event = await pg_conn.fetchrow(dedent('''
                     SELECT * FROM artwork_indexer.event_queue
-                    WHERE attempts < $1
-                    AND (
-                        last_attempted IS NULL
-                        OR last_attempted <=
-                            (now() - (interval '30 minutes' * 2 * attempts))
-                    )
-                    ORDER BY id ASC
+                    WHERE state = 'queued'
+                    AND attempts < $1
+                    AND last_updated <=
+                        (now() - (interval '30 minutes' * 2 * attempts))
+                    ORDER BY created ASC
                     LIMIT 1
                     FOR UPDATE SKIP LOCKED
                 '''), MAX_ATTEMPTS)
@@ -137,27 +166,31 @@ async def indexer(config, maxwait):
                 else:
                     if sleep_amount < maxwait:
                         sleep_amount = min(sleep_amount * 2, maxwait)
-                    continue
 
-                logging.info('Processing event %s', event)
+                    # Since there's nothing else to do, cleanup old events.
+                    asyncio.create_task(cleanup_events(pg_pool))
+                    continue
 
                 await pg_conn.execute(dedent('''
                     UPDATE artwork_indexer.event_queue
-                    SET attempts = attempts + 1
+                    SET state = 'running',
+                        attempts = attempts + 1
                     WHERE id = $1
                 '''), event['id'])
 
-                handler = event_handler_map[event['entity_type']]
+                logging.info('Processing event %s', event)
 
                 try:
-                    message = json.loads(event['message'])
+                    parsed_message = json.loads(event['message'])
                 except BaseException as e:
-                    await log_failure_reason(pg_conn, event, e)
+                    await handle_event_failure(pg_conn, event, e)
+
+                handler = event_handler_map[event['entity_type']]
 
                 task = asyncio.create_task(run_event_handler(
                     pg_pool,
                     getattr(handler, event['action']),
-                    message,
+                    parsed_message,
                 ))
                 task.add_done_callback(partial(task_done, event))
 

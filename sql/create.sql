@@ -18,20 +18,24 @@ CREATE TYPE event_queue_action AS ENUM (
     'deindex'
 );
 
+CREATE TYPE event_state AS ENUM (
+    'queued',
+    'running',
+    'failed',
+    'completed'
+);
+
 CREATE TABLE event_queue (
     id                  BIGSERIAL,
+    state               event_state NOT NULL DEFAULT 'queued',
     entity_type         indexable_entity_type NOT NULL,
     action              event_queue_action NOT NULL,
     message             JSONB NOT NULL,
     created             TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    -- Note `event_queue_idx_uniq` below. Due to the requirement that
-    -- events be unique, the `ON CONFLICT` action for external triggers
-    -- should be `DO UPDATE SET attempts = 0` in order to revive dead
-    -- events that have reached their maximum number of attempts. This
-    -- means that `last_attempted` may be set from a previous failure
-    -- even if `attempts` is 0.
+    -- Note `event_queue_idx_queued_uniq` below. Due to the requirement
+    -- that queued events be unique, external triggers should have an
+    -- `ON CONFLICT DO NOTHING` action.
     attempts            SMALLINT NOT NULL DEFAULT 0,
-    last_attempted      TIMESTAMP WITH TIME ZONE,
     last_updated        TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
@@ -51,12 +55,16 @@ ALTER TABLE event_failure_reason
     REFERENCES event_queue(id)
     ON DELETE CASCADE;
 
--- MusicBrainz Server will sometimes publish the same message multiple
--- times due to its SQL triggers firing for the same release (or event)
--- across multiple statements. It's therefore useful to enforce that
--- index events be unique.
-CREATE UNIQUE INDEX event_queue_idx_uniq
-    ON event_queue (entity_type, action, message);
+--- MusicBrainz Server will sometimes publish the same message multiple
+--- times due to its SQL triggers firing for the same release (or event)
+--- across multiple statements. It's therefore useful to enforce that
+--- queued index events be unique.
+CREATE UNIQUE INDEX event_queue_idx_queued_uniq
+    ON event_queue (entity_type, action, message)
+    WHERE state = 'queued';
+
+CREATE INDEX event_queue_idx_state_created
+    ON event_queue (state, created);
 
 CREATE INDEX event_failure_reason_idx_event
     ON event_failure_reason (event, created);
@@ -64,9 +72,6 @@ CREATE INDEX event_failure_reason_idx_event
 CREATE OR REPLACE FUNCTION b_upd_event_queue()
 RETURNS TRIGGER AS $$
 BEGIN
-    IF NEW.attempts > OLD.attempts THEN
-        NEW.last_attempted = NOW();
-    END IF;
     NEW.last_updated = NOW();
     RETURN NEW;
 END;
