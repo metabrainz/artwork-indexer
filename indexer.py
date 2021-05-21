@@ -135,8 +135,6 @@ async def indexer(config, maxwait):
                 asyncio.create_task(complete_event(pg_pool, event))
 
         while True:
-            logging.debug('Sleeping for %s second(s)', sleep_amount)
-
             await asyncio.sleep(sleep_amount)
 
             async with \
@@ -166,6 +164,7 @@ async def indexer(config, maxwait):
                 else:
                     if sleep_amount < maxwait:
                         sleep_amount = min(sleep_amount * 2, maxwait)
+                        logging.debug('No event found; sleeping for %s second(s)', sleep_amount)
 
                     # Since there's nothing else to do, cleanup old events.
                     asyncio.create_task(cleanup_events(pg_pool))
