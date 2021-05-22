@@ -112,6 +112,24 @@ BEGIN
 END;
 $$ LANGUAGE 'plpgsql';
 
+CREATE OR REPLACE FUNCTION reindex_eaa_type() RETURNS trigger AS $$
+BEGIN
+    INSERT INTO artwork_indexer.event_queue (entity_type, action, message) (
+        SELECT 'event', 'index', jsonb_build_object('gid', e.gid::text)
+        FROM musicbrainz.event e
+        JOIN event_art_archive.event_art ea ON e.id = ea.event
+        WHERE ea.id = coalesce((
+            CASE TG_OP
+                WHEN 'DELETE' THEN OLD.id
+                ELSE NEW.id
+            END
+        ))
+    )
+    ON CONFLICT DO NOTHING;
+    RETURN NULL;
+END;
+$$ LANGUAGE 'plpgsql';
+
 CREATE OR REPLACE FUNCTION move_event() RETURNS trigger AS $$
 BEGIN
     IF OLD.event != NEW.event THEN

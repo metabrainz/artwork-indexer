@@ -12,8 +12,9 @@ DROP TRIGGER IF EXISTS eaa_reindex ON musicbrainz.artist;
 DROP TRIGGER IF EXISTS eaa_reindex ON musicbrainz.l_artist_event;
 DROP TRIGGER IF EXISTS eaa_reindex ON musicbrainz.place;
 DROP TRIGGER IF EXISTS eaa_reindex ON musicbrainz.l_event_place;
-DROP TRIGGER IF EXISTS eaa_reindex ON musicbrainz.event_art;
-DROP TRIGGER IF EXISTS eaa_move ON musicbrainz.event_art;
+DROP TRIGGER IF EXISTS eaa_reindex ON event_art_archive.event_art;
+DROP TRIGGER IF EXISTS eaa_reindex ON event_art_archive.event_art_type;
+DROP TRIGGER IF EXISTS eaa_move ON event_art_archive.event_art;
 DROP TRIGGER IF EXISTS eaa_delete ON musicbrainz.event;
 
 CREATE TRIGGER eaa_reindex AFTER UPDATE OR INSERT
@@ -39,6 +40,10 @@ CREATE TRIGGER eaa_reindex AFTER UPDATE OR INSERT OR DELETE
 CREATE TRIGGER eaa_reindex AFTER UPDATE OR INSERT OR DELETE
     ON event_art_archive.event_art FOR EACH ROW
     EXECUTE PROCEDURE reindex_eaa();
+
+CREATE TRIGGER eaa_reindex AFTER UPDATE OR INSERT OR DELETE
+    ON event_art_archive.event_art_type FOR EACH ROW
+    EXECUTE PROCEDURE reindex_eaa_type();
 
 CREATE TRIGGER eaa_move BEFORE UPDATE
     ON event_art_archive.event_art FOR EACH ROW
