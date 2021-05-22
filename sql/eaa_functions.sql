@@ -135,6 +135,7 @@ END;
 $$ LANGUAGE 'plpgsql';
 
 CREATE OR REPLACE FUNCTION delete_event() RETURNS trigger AS $$
+BEGIN
     INSERT INTO artwork_indexer.event_queue (entity_type, action, message) (
         SELECT 'event', 'delete_image', jsonb_build_object(
             'artwork_id', ea.id,
@@ -152,6 +153,7 @@ CREATE OR REPLACE FUNCTION delete_event() RETURNS trigger AS $$
     ON CONFLICT DO NOTHING;
 
     RETURN OLD;
+END;
 $$ LANGUAGE 'plpgsql';
 
 COMMIT;
