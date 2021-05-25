@@ -72,7 +72,9 @@ CREATE INDEX event_failure_reason_idx_event
 CREATE OR REPLACE FUNCTION b_upd_event_queue()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW.last_updated = NOW();
+    IF OLD.last_updated = NEW.last_updated THEN
+        NEW.last_updated = NOW();
+    END IF;
     RETURN NEW;
 END;
 $$ LANGUAGE 'plpgsql';
