@@ -23,6 +23,9 @@ import urllib.parse
 from textwrap import dedent
 
 
+IMAGE_FILE_FORMAT = '{bucket}-{id}.{suffix}'
+
+
 def kebab(s):
     return s.replace('_', '-')
 
@@ -168,16 +171,15 @@ class EventHandler:
         new_gid = message['new_gid']
         suffix = message['suffix']
 
-        image_file_format = '{bucket}-{id}.{suffix}'
         old_bucket = self.build_bucket_name(old_gid)
         new_bucket = self.build_bucket_name(new_gid)
 
-        old_file_name = image_file_format.format(
+        old_file_name = IMAGE_FILE_FORMAT.format(
             bucket=old_bucket,
             id=artwork_id,
             suffix=suffix
         )
-        new_file_name = image_file_format.format(
+        new_file_name = IMAGE_FILE_FORMAT.format(
             bucket=new_bucket,
             id=artwork_id,
             suffix=suffix
@@ -213,7 +215,7 @@ class EventHandler:
         gid = message['gid']
 
         filename = IMAGE_FILE_FORMAT.format(
-            mbid=gid,
+            bucket=gid,
             id=message['artwork_id'],
             suffix=message['suffix']
         )
