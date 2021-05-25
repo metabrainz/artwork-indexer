@@ -26,7 +26,7 @@ CREATE TYPE event_state AS ENUM (
 );
 
 CREATE TABLE event_queue (
-    id                  BIGSERIAL,
+    id                  SERIAL,
     state               event_state NOT NULL DEFAULT 'queued',
     entity_type         indexable_entity_type NOT NULL,
     action              event_queue_action NOT NULL,
