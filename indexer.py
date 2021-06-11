@@ -30,10 +30,7 @@ from textwrap import dedent
 import aiohttp
 import asyncpg
 
-from handlers import (
-    EventEventHandler,
-    ReleaseEventHandler,
-)
+from handlers import EVENT_HANDLER_CLASSES
 
 # Maximum number of times we should try to handle an event
 # before we give up. This works together with the `attempts`
@@ -42,11 +39,6 @@ from handlers import (
 # processing and require manual intervention; start by
 # inspecting the `event_failure_reason` table.
 MAX_ATTEMPTS = 5
-
-EVENT_HANDLER_CLASSES = {
-    'event': EventEventHandler,  # MusicBrainz event
-    'release': ReleaseEventHandler,  # MusicBrainz release
-}
 
 
 async def handle_event_failure(pg_conn, event, error):
@@ -180,11 +172,20 @@ async def indexer(config, maxwait, max_idle_loops=inf):
                 # minutes, and double the amount of time after each
                 # attempt.
                 event = await pg_conn.fetchrow(dedent('''
-                    SELECT * FROM artwork_indexer.event_queue
-                    WHERE state = 'queued'
-                    AND attempts < $1
-                    AND last_updated <=
-                        (now() - (interval '30 minutes' * 2 * attempts))
+                    SELECT * FROM artwork_indexer.event_queue eq
+                    WHERE eq.state = 'queued'
+                    AND eq.attempts < $1
+                    AND eq.last_updated <=
+                        (now() - (interval '30 minutes' * 2 * eq.attempts))
+                    AND (eq.depends_on IS NULL OR EXISTS (
+                        SELECT TRUE
+                        FROM artwork_indexer.event_queue parent_eq
+                        WHERE array_position(
+                            eq.depends_on,
+                            parent_eq.id
+                        ) IS NOT NULL
+                        AND parent_eq.state = 'completed'
+                    ))
                     ORDER BY created, id
                     LIMIT 1
                     FOR UPDATE SKIP LOCKED
@@ -212,12 +213,11 @@ async def indexer(config, maxwait, max_idle_loops=inf):
 
                     continue
 
-                await pg_conn.execute(dedent('''
-                    UPDATE artwork_indexer.event_queue
-                    SET state = 'running',
-                        attempts = attempts + 1
-                    WHERE id = $1
-                '''), event['id'])
+                if event['state'] != 'queued':
+                    # This is mainly a development aid.  In at least one
+                    # occasion I broke the SQL query above by having bad
+                    # boolean operator precedence.  -- mwiencek
+                    raise Exception('Event is not queued: %r', event)
 
                 logging.info('Processing event %s', event)
 
@@ -225,6 +225,48 @@ async def indexer(config, maxwait, max_idle_loops=inf):
                     parsed_message = json.loads(event['message'])
                 except BaseException as e:
                     await handle_event_failure(pg_conn, event, e)
+
+                if event['action'] == 'delete_image' and \
+                        event['depends_on'] is None:
+                    # If `delete_image` event exists with no parent,
+                    # there should be no later `copy_image` event for
+                    # the same image. Verify this to be safe.
+                    later_copy_image_event = await pg_conn.fetchrow(dedent('''
+                        SELECT id FROM artwork_indexer.event_queue eq
+                        WHERE eq.state = 'queued'
+                        AND eq.action = 'copy_image'
+                        AND eq.created > $1
+                        AND eq.message->'artwork_id' = $2
+                        AND eq.message->'old_gid' = $3
+                        AND eq.message->'suffix' = $4
+                        LIMIT 1
+                    '''), event['created'], *[
+                        json.dumps(x) for x in (
+                            parsed_message['artwork_id'],
+                            parsed_message['gid'],
+                            parsed_message['suffix'],
+                        )
+                    ])
+
+                    if later_copy_image_event:
+                        await handle_event_failure(
+                            pg_conn,
+                            event,
+                            Exception(
+                                'This image cannot be deleted, because ' +
+                                'a later event exists ' +
+                                f'(id={later_copy_image_event}) ' +
+                                'that wants to copy it.'
+                            )
+                        )
+                        continue
+
+                await pg_conn.execute(dedent('''
+                    UPDATE artwork_indexer.event_queue
+                    SET state = 'running',
+                        attempts = attempts + 1
+                    WHERE id = $1
+                '''), event['id'])
 
                 handler = event_handler_map[event['entity_type']]
 
