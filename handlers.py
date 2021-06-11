@@ -219,6 +219,8 @@ class EventHandler:
             id=message['artwork_id'],
             suffix=message['suffix']
         )
+        # Note: This request should succeed (204) even if the file
+        # no longer exists.
         await self.http_session.delete(
             self.build_s3_item_url(gid, filename),
             headers={
@@ -229,6 +231,8 @@ class EventHandler:
         )
 
     async def deindex(self, pg_conn, message):
+        # Note: This request should succeed (204) even if the file
+        # no longer exists.
         await self.http_session.delete(
             self.build_s3_item_url(message['gid'], 'index.json'),
             headers={
