@@ -9,7 +9,6 @@ SET search_path = 'cover_art_archive';
 
 DROP TRIGGER IF EXISTS caa_reindex ON musicbrainz.release;
 DROP TRIGGER IF EXISTS caa_reindex ON musicbrainz.artist;
-DROP TRIGGER IF EXISTS caa_reindex ON musicbrainz.release_label;
 DROP TRIGGER IF EXISTS caa_reindex ON cover_art_archive.cover_art;
 DROP TRIGGER IF EXISTS caa_reindex ON cover_art_archive.cover_art_type;
 DROP TRIGGER IF EXISTS caa_move ON cover_art_archive.cover_art;
@@ -22,10 +21,6 @@ CREATE TRIGGER caa_reindex AFTER UPDATE OR INSERT
 CREATE TRIGGER caa_reindex AFTER UPDATE
     ON musicbrainz.artist FOR EACH ROW
     EXECUTE PROCEDURE reindex_artist();
-
-CREATE TRIGGER caa_reindex AFTER UPDATE OR INSERT
-    ON musicbrainz.release_label FOR EACH ROW
-    EXECUTE PROCEDURE reindex_release_via_catno();
 
 CREATE TRIGGER caa_reindex AFTER UPDATE OR INSERT OR DELETE
     ON cover_art_archive.cover_art FOR EACH ROW

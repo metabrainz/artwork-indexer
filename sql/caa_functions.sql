@@ -43,26 +43,6 @@ BEGIN
 END;
 $$ LANGUAGE 'plpgsql';
 
-CREATE OR REPLACE FUNCTION reindex_release_via_catno() RETURNS trigger AS $$
-DECLARE
-  release_mbid UUID;
-BEGIN
-    SELECT gid INTO release_mbid
-    FROM musicbrainz.release
-    JOIN musicbrainz.release_label ON release_label.release = release.id
-    JOIN cover_art_archive.cover_art caa_r ON release.id = caa_r.release
-    WHERE release.id = NEW.release;
-
-    IF FOUND THEN
-        INSERT INTO artwork_indexer.event_queue (entity_type, action, message)
-        VALUES ('release', 'index', jsonb_build_object('gid', release_mbid::text))
-        ON CONFLICT DO NOTHING;
-    END IF;
-
-    RETURN NULL;
-END;
-$$ LANGUAGE 'plpgsql';
-
 CREATE OR REPLACE FUNCTION reindex_caa() RETURNS trigger AS $$
 BEGIN
     INSERT INTO artwork_indexer.event_queue (entity_type, action, message) (
