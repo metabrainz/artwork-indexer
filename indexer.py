@@ -196,7 +196,7 @@ async def indexer(config, maxwait, max_idle_loops=inf):
                     AND attempts < $1
                     AND last_updated <=
                         (now() - (interval '30 minutes' * 2 * attempts))
-                    ORDER BY created ASC
+                    ORDER BY created, id
                     LIMIT 1
                     FOR UPDATE SKIP LOCKED
                 '''), MAX_ATTEMPTS)
