@@ -17,7 +17,6 @@
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
 import json
-import logging
 import urllib.parse
 from textwrap import dedent
 
@@ -252,7 +251,8 @@ class MusicBrainzEventHandler(EventHandler):
             'types': row['types'],
             'front': bool(row['is_front']),
             'comment': row['comment'],
-            'image': self.build_image_url(mbid, artwork_id, None, row['suffix']),
+            'image': self.build_image_url(
+                mbid, artwork_id, None, row['suffix']),
             'thumbnails': {
                 'small': self.build_image_url(mbid, artwork_id, 250, 'jpg'),
                 'large': self.build_image_url(mbid, artwork_id, 500, 'jpg'),

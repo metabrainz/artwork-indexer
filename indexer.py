@@ -24,8 +24,6 @@ import logging
 import re
 import signal
 import traceback
-from collections import deque
-from functools import partial
 from math import inf
 from textwrap import dedent
 
@@ -46,8 +44,8 @@ from handlers import (
 MAX_ATTEMPTS = 5
 
 EVENT_HANDLER_CLASSES = {
-    'event': EventEventHandler, # MusicBrainz event
-    'release': ReleaseEventHandler, # MusicBrainz release
+    'event': EventEventHandler,  # MusicBrainz event
+    'release': ReleaseEventHandler,  # MusicBrainz release
 }
 
 
@@ -123,13 +121,16 @@ async def cleanup_events(pg_pool):
         deletion_count = int(deletion_count_match[1])
         if deletion_count:
             logging.debug(
-                'Deleted ' + str(deletion_count) + ' event' + \
-                ('s' if deletion_count > 1 else '') + \
+                'Deleted ' + str(deletion_count) + ' event' +
+                ('s' if deletion_count > 1 else '') +
                 ' older than 90 days')
             await pg_pool.execute(dedent('''
                 SELECT setval(
-                    pg_get_serial_sequence('artwork_indexer.event_queue', 'id'),
-                    COALESCE((SELECT MAX(id) FROM artwork_indexer.event_queue), 0) + 1,
+                    pg_get_serial_sequence(
+                        'artwork_indexer.event_queue', 'id'),
+                    COALESCE((
+                        SELECT MAX(id) FROM artwork_indexer.event_queue
+                    ), 0) + 1,
                     FALSE)
             '''))
 
@@ -154,12 +155,11 @@ async def run_event_handler(pg_pool, event, handler, message):
 
 
 async def indexer(config, maxwait, max_idle_loops=inf):
-    sleep_amount = 1 # seconds
+    sleep_amount = 1  # seconds
 
     async with \
-        asyncpg.create_pool(**config['database']) as pg_pool, \
-        aiohttp.ClientSession(raise_for_status=True) as http_session:
-
+            asyncpg.create_pool(**config['database']) as pg_pool, \
+            aiohttp.ClientSession(raise_for_status=True) as http_session:
         event_handler_map = {
             entity: cls(config, http_session)
             for entity, cls in EVENT_HANDLER_CLASSES.items()
@@ -171,8 +171,8 @@ async def indexer(config, maxwait, max_idle_loops=inf):
             await asyncio.sleep(sleep_amount)
 
             async with \
-                pg_pool.acquire() as pg_conn, \
-                pg_conn.transaction():
+                    pg_pool.acquire() as pg_conn, \
+                    pg_conn.transaction():
 
                 # Skip events that have reached `MAX_ATTEMPTS`.
                 # In other cases, `last_updated` should be within a
@@ -205,7 +205,10 @@ async def indexer(config, maxwait, max_idle_loops=inf):
 
                     if sleep_amount < maxwait:
                         sleep_amount = min(sleep_amount * 2, maxwait)
-                        logging.debug('No event found; sleeping for %s second(s)', sleep_amount)
+                        logging.debug(
+                            'No event found; sleeping for %s second(s)',
+                            sleep_amount,
+                        )
 
                     continue
 

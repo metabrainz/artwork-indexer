@@ -11,12 +11,16 @@ cffi==1.14.5
 chardet==4.0.0
 contextlib2==0.6.0.post1
 docopt==0.6.2
+flake8==3.9.2
 idna==3.1
 jsonpatch==1.32
 jsonpointer==2.1
+mccabe==0.6.1
 multidict==5.1.0
 pycares==4.0.0
+pycodestyle==2.7.0
 pycparser==2.20
+pyflakes==2.3.1
 schema==0.7.4
 six==1.16.0
 tqdm==4.60.0
