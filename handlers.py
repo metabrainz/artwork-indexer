@@ -105,30 +105,16 @@ class EventHandler:
         bucket = self.build_bucket_name(gid)
         return url.format(bucket=bucket, file=filename)
 
-    async def fetch_entity_row(self, pg_conn, gid):
-        raise NotImplementedError
-
-    async def fetch_image_rows(self, pg_conn, entity_row):
+    async def fetch_image_rows(self, pg_conn, entity_gid):
         raise NotImplementedError
 
     async def index(self, pg_conn, message):
-        given_gid = message['gid']
-
-        entity = await self.fetch_entity_row(pg_conn, given_gid)
-        if entity is None:
-            logging.debug(
-                '%s %s does not exist, skipping indexing',
-                self.entity_type,
-                given_gid,
-            )
-            return
-
-        gid = entity['gid'] # in case of redirect
+        gid = message['gid']
 
         encoded_index_json = json.dumps({
             'images': [
                 self.build_image_json(gid, row)
-                for row in await self.fetch_image_rows(pg_conn, entity)
+                for row in await self.fetch_image_rows(pg_conn, gid)
             ],
             kebab(self.entity_type): self.build_canonical_entity_url(gid),
         }, ensure_ascii=True, sort_keys=True).encode('ascii')
@@ -298,24 +284,7 @@ class MusicBrainzEventHandler(EventHandler):
             headers['mb-set-database'] = database
         return headers
 
-    async def fetch_entity_row(self, pg_conn, mbid):
-        entity_type = self.entity_type
-
-        return await pg_conn.fetchrow(dedent('''
-            SELECT id, gid
-            FROM musicbrainz.{entity}
-            WHERE id IN (
-                SELECT new_id
-                FROM musicbrainz.{entity}_gid_redirect
-                WHERE gid = $1
-                UNION ALL
-                SELECT id
-                FROM musicbrainz.{entity}
-                WHERE gid = $1
-            )
-        '''.format(entity=entity_type)), mbid)
-
-    async def fetch_image_rows(self, pg_conn, entity_row):
+    async def fetch_image_rows(self, pg_conn, mbid):
         schema = self.artwork_schema
         entity_type = self.entity_type
 
@@ -323,10 +292,11 @@ class MusicBrainzEventHandler(EventHandler):
             dedent('''
                 SELECT * FROM {schema}.index_listing
                 JOIN {schema}.image_type USING (mime_type)
-                WHERE {entity} = $1
+                WHERE {entity} = (SELECT id FROM {entity} WHERE gid = $1)
                 ORDER BY ordering
-            '''.format(schema=schema, entity=entity_type),
-        ), entity_row['id'])
+            '''.format(schema=schema, entity=entity_type)),
+            mbid,
+        )
 
 
 class ReleaseEventHandler(MusicBrainzEventHandler):
