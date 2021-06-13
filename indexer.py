@@ -87,9 +87,23 @@ async def complete_event(conn, event):
 
 
 async def cleanup_events(pg_pool):
+    # Cleanup completed events older than 90 days. We only keep these
+    # around in case they help with debugging.
+    #
+    # Failed events are not cleaned up. These should always be
+    # inspected and dealt with, not ignored and left for deletion.
+    # (After all, it's less likely that they're due to transient server
+    # issues given the number of times we retry them before marking
+    # them as failed.)
+    #
+    # We clearly don't want to delete queued or running events, either.
+    # It's so unlikely that an event would be in those states for 90
+    # days that we'd *definitely* want to inspect them and find out
+    # why.
     deletion_tag = await pg_pool.execute(dedent('''
         DELETE FROM artwork_indexer.event_queue
-        WHERE (now() - created) > interval '90 days'
+        WHERE state = 'completed'
+        AND (now() - created) > interval '90 days'
     '''))
     deletion_count_match = re.match(r'DELETE ([0-9]+)', deletion_tag)
     if deletion_count_match:
