@@ -26,6 +26,7 @@ import signal
 import traceback
 from collections import deque
 from functools import partial
+from math import inf
 from textwrap import dedent
 
 import aiohttp
@@ -113,7 +114,7 @@ async def run_event_handler(pg_pool, handler_method, message):
         await handler_method(pg_conn, message)
 
 
-async def indexer(config, maxwait):
+async def indexer(config, maxwait, max_idle_loops=inf):
     sleep_amount = 1 # seconds
 
     async with \
@@ -139,6 +140,8 @@ async def indexer(config, maxwait):
                     event['id'],
                 )
                 asyncio.create_task(complete_event(pg_pool, event))
+
+        idle_loops = 0
 
         while True:
             await asyncio.sleep(sleep_amount)
@@ -167,13 +170,19 @@ async def indexer(config, maxwait):
                 # increase it exponentially up to `maxwait` seconds.
                 if event:
                     sleep_amount = 1
+                    idle_loops = 0
                 else:
+                    # Since there's nothing else to do, cleanup old events.
+                    asyncio.create_task(cleanup_events(pg_pool))
+
+                    idle_loops += 1
+                    if idle_loops >= max_idle_loops:
+                        break
+
                     if sleep_amount < maxwait:
                         sleep_amount = min(sleep_amount * 2, maxwait)
                         logging.debug('No event found; sleeping for %s second(s)', sleep_amount)
 
-                    # Since there's nothing else to do, cleanup old events.
-                    asyncio.create_task(cleanup_events(pg_pool))
                     continue
 
                 await pg_conn.execute(dedent('''
