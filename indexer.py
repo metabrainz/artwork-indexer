@@ -55,6 +55,27 @@ async def handle_event_failure(conn, event, error):
     logging.error(error)
     logging.error(''.join(traceback.format_tb(error.__traceback__)))
 
+    # When an exception occurs, we only mark the event as failed
+    # in two situations:
+    #
+    #   (1) it's reached MAX_ATTEMPTS
+    #
+    #   (2) an identical event with state = 'queued' exists
+    #       (pushed while this one was running)
+    #
+    # Otherwise, the event stays queued and is retried later based
+    # on the number of attempts so far. (See the `indexer` function
+    # below for how this delay calculated.)
+    #
+    # 'failed' strictly means 'will not be retried'. An important
+    # reason that we don't mark events as failed while they're waiting
+    # to run again is the UNIQUE INDEX `event_queue_idx_queued_uniq`
+    # only applies where state = 'queued'. We wouldn't want to allow
+    # events to be inserted that duplicate ones that still have
+    # attempts left; that would cause duplicate work at best, and
+    # compounding failures at worst, not to mention bypass any delay in
+    # processing we have on the existing event.
+
     await conn.execute(dedent('''
         UPDATE artwork_indexer.event_queue eq
         SET state = (
