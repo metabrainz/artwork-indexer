@@ -79,18 +79,18 @@ async def handle_event_failure(conn, event, error):
     await conn.execute(dedent('''
         UPDATE artwork_indexer.event_queue eq
         SET state = (
-            CASE WHEN eq.attempts >= $2 OR EXISTS (
+            CASE WHEN eq.attempts >= $1 OR EXISTS (
                 SELECT 1
                 FROM artwork_indexer.event_queue dup
                 WHERE dup.state = 'queued'
                 AND dup.action = eq.action
                 AND dup.message = eq.message
-                AND dup.id != $1
+                AND dup.id != $2
                 FOR UPDATE
             ) THEN 'failed' ELSE 'queued' END
         )::artwork_indexer.event_state
-        WHERE eq.id = $1
-    '''), event['id'], MAX_ATTEMPTS)
+        WHERE eq.id = $2
+    '''), MAX_ATTEMPTS, event['id'])
 
     await conn.execute(dedent('''
         INSERT INTO artwork_indexer.event_failure_reason
