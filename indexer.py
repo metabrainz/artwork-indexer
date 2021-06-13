@@ -51,7 +51,7 @@ EVENT_HANDLER_CLASSES = {
 }
 
 
-async def handle_event_failure(conn, event, error):
+async def handle_event_failure(pg_conn, event, error):
     logging.error(error)
     logging.error(''.join(traceback.format_tb(error.__traceback__)))
 
@@ -76,7 +76,7 @@ async def handle_event_failure(conn, event, error):
     # compounding failures at worst, not to mention bypass any delay in
     # processing we have on the existing event.
 
-    await conn.execute(dedent('''
+    await pg_conn.execute(dedent('''
         UPDATE artwork_indexer.event_queue eq
         SET state = (
             CASE WHEN eq.attempts >= $1 OR EXISTS (
@@ -92,19 +92,11 @@ async def handle_event_failure(conn, event, error):
         WHERE eq.id = $2
     '''), MAX_ATTEMPTS, event['id'])
 
-    await conn.execute(dedent('''
+    await pg_conn.execute(dedent('''
         INSERT INTO artwork_indexer.event_failure_reason
             (event, failure_reason)
         VALUES ($1, $2)
     '''), event['id'], str(error))
-
-
-async def complete_event(conn, event):
-    await conn.execute(dedent('''
-        UPDATE artwork_indexer.event_queue
-        SET state = 'completed'
-        WHERE id = $1
-    '''), event['id'])
 
 
 async def cleanup_events(pg_pool):
@@ -142,11 +134,23 @@ async def cleanup_events(pg_pool):
             '''))
 
 
-async def run_event_handler(pg_pool, handler_method, message):
-    async with \
-        pg_pool.acquire() as pg_conn, \
-        pg_conn.transaction():
-        await handler_method(pg_conn, message)
+async def run_event_handler(pg_pool, event, handler, message):
+    async with pg_pool.acquire() as pg_conn, pg_conn.transaction():
+        handler_method = getattr(handler, event['action'])
+        try:
+            await handler_method(pg_conn, message)
+        except BaseException as task_exc:
+            await handle_event_failure(pg_conn, event, task_exc)
+        else:
+            logging.debug(
+                'Event id=%s finished succesfully',
+                event['id'],
+            )
+            await pg_conn.execute(dedent('''
+                UPDATE artwork_indexer.event_queue
+                SET state = 'completed'
+                WHERE id = $1
+            '''), event['id'])
 
 
 async def indexer(config, maxwait, max_idle_loops=inf):
@@ -160,21 +164,6 @@ async def indexer(config, maxwait, max_idle_loops=inf):
             entity: cls(config, http_session)
             for entity, cls in EVENT_HANDLER_CLASSES.items()
         }
-
-        def task_done(event, task):
-            task_exc = task.exception()
-            if task_exc:
-                asyncio.create_task(handle_event_failure(
-                    pg_pool,
-                    event,
-                    task_exc,
-                ))
-            else:
-                logging.debug(
-                    'Event id=%s finished succesfully',
-                    event['id'],
-                )
-                asyncio.create_task(complete_event(pg_pool, event))
 
         idle_loops = 0
 
@@ -236,12 +225,12 @@ async def indexer(config, maxwait, max_idle_loops=inf):
 
                 handler = event_handler_map[event['entity_type']]
 
-                task = asyncio.create_task(run_event_handler(
+                asyncio.create_task(run_event_handler(
                     pg_pool,
-                    getattr(handler, event['action']),
+                    event,
+                    handler,
                     parsed_message,
                 ))
-                task.add_done_callback(partial(task_done, event))
 
 
 def main():
