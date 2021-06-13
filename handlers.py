@@ -16,7 +16,6 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
-import io
 import json
 import logging
 import urllib.parse
@@ -132,13 +131,14 @@ class EventHandler:
                 for row in await self.fetch_image_rows(pg_conn, entity)
             ],
             kebab(self.entity_type): self.build_canonical_entity_url(gid),
-        }, sort_keys=True)
+        }, ensure_ascii=True, sort_keys=True).encode('ascii')
 
         await self.http_session.put(
             self.build_s3_item_url(gid, 'index.json'),
-            data=io.StringIO(encoded_index_json),
+            data=encoded_index_json,
             headers={
                 **self.build_authorization_header(),
+                'content-type': 'application/json; charset=US-ASCII',
                 'x-archive-auto-make-bucket': '1',
                 'x-archive-keep-old-version': '1',
                 'x-archive-meta-collection': self.ia_collection,
@@ -151,15 +151,16 @@ class EventHandler:
         async with self.http_session.get(entity_metadata_url,
                                          headers=entity_metadata_headers) \
                 as response:
-            entity_metadata = await response.text()
+            encoded_entity_metadata = (await response.text()).encode('utf-8')
             await self.http_session.put(
                 self.build_s3_item_url(
                     gid,
                     self.build_metadata_ia_filename(gid),
                 ),
-                data=io.StringIO(entity_metadata),
+                data=encoded_entity_metadata,
                 headers={
                     **self.build_authorization_header(),
+                    'content-type': 'application/xml; charset=UTF-8',
                     'x-archive-auto-make-bucket': '1',
                     'x-archive-meta-collection': self.ia_collection,
                 },
