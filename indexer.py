@@ -204,6 +204,11 @@ def main():
     arg_parser = argparse.ArgumentParser(
         description='update artwork index files at the Internet Archive',
     )
+    arg_parser.add_argument('--config',
+                            help='path to config file',
+                            dest='config',
+                            type=str,
+                            default='config.ini')
     arg_parser.add_argument('--debug',
                             help='enable debug mode',
                             dest='debug',
@@ -227,7 +232,7 @@ def main():
         logging.info('Got SIGHUP, reloading configuration')
         config.read('config.ini')
 
-    config.read('config.ini')
+    config.read(args.config)
     signal.signal(signal.SIGHUP, reload_configuration)
 
     loop = asyncio.get_event_loop()
