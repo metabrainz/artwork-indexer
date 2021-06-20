@@ -193,7 +193,7 @@ class EventHandler:
         gid = message['gid']
 
         filename = IMAGE_FILE_FORMAT.format(
-            bucket=gid,
+            bucket=self.build_bucket_name(gid),
             id=message['artwork_id'],
             suffix=message['suffix']
         )

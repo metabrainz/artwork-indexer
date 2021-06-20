@@ -543,7 +543,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
             release_image_copy_put(RELEASE1_MBID, RELEASE2_MBID, 1),
             {
                 'method': 'DELETE',
-                'url': f'http://mbid-{RELEASE1_MBID}.s3.example.com/{RELEASE1_MBID}-1.jpg',
+                'url': f'http://mbid-{RELEASE1_MBID}.s3.example.com/mbid-{RELEASE1_MBID}-1.jpg',
                 'data': None,
                 'headers': {
                     'authorization': 'LOW user:pass',
@@ -710,7 +710,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(LAST_REQUESTS, [
             {
                 'method': 'DELETE',
-                'url': f'http://mbid-{RELEASE2_MBID}.s3.example.com/{RELEASE2_MBID}-1.jpg',
+                'url': f'http://mbid-{RELEASE2_MBID}.s3.example.com/mbid-{RELEASE2_MBID}-1.jpg',
                 'data': None,
                 'headers': {
                     'authorization': 'LOW user:pass',
