@@ -25,7 +25,7 @@ CREATE TYPE event_state AS ENUM (
     -- which case they're stuck until the failed parent event is dealt
     -- with.
     --
-    -- There may not be more than one queued event for the same
+    -- There cannot be more than one queued event for the same
     -- (entity_type, action, message) tuple. See
     -- `event_queue_idx_queued_uniq` below.
     'queued',
