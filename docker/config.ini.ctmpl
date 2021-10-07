@@ -1,0 +1,20 @@
+{{- $svc := "docker-server-configs/services/caa-indexer.json/" }}
+{{- $const := "docker-server-configs/constants.json/" }}
+
+[musicbrainz]
+url=https://musicbrainz.org
+
+[database]
+{{- with service "pgbouncer-master" }}
+{{- with index . 0 }}
+host={{.Address}}
+port={{.Port}}
+{{- end }}
+{{- end }}
+user={{ keyOrDefault (print $svc "postgres_user") "musicbrainz" }}
+database={{ keyOrDefault (print $svc "postgres_database") "musicbrainz_db" }}
+
+[s3]
+url=https://{bucket}.s3.us.archive.org/{file}
+access={{ keyOrDefault (print $const "caa_access_key") "" }}
+secret={{ keyOrDefault (print $const "caa_secret_key") "" }}

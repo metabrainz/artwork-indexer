@@ -1,0 +1,6 @@
+#!/bin/bash
+
+cd /home/art/artwork-indexer
+
+exec sudo -E -H -u art \
+    python indexer.py --debug
