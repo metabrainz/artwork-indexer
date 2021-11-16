@@ -1,4 +1,4 @@
-FROM metabrainz/python:3.9-focal-20211007
+FROM metabrainz/python:3.9-focal-20211030
 
 RUN useradd --create-home --shell /bin/bash art
 
