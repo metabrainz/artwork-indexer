@@ -17,6 +17,8 @@ Succesor to the old, Perl-and-RabbitMQ-based
 
   * Python >= 3.9
   * PostgreSQL >= 12
+  * aiohttp
+  * asyncpg
 
 You will need a MusicBrainz database. See the `INSTALL.md` document of the
 [musicbrainz-server](https://github.com/metabrainz/musicbrainz-server)
