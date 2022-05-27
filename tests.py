@@ -326,8 +326,8 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
             INSERT INTO musicbrainz.artist (id, gid, name, sort_name)
                 VALUES (1, 'ae859a2d-5754-4e88-9af0-6df263345535', '🀽', '🀽');
 
-            INSERT INTO musicbrainz.artist_credit (id, name, artist_count)
-                VALUES (1, '✺⧳', 1);
+            INSERT INTO musicbrainz.artist_credit (id, gid, name, artist_count)
+                VALUES (1, '87d69648-5604-4237-929d-6d2774867811', '✺⧳', 1);
 
             INSERT INTO musicbrainz.artist_credit_name (artist_credit, name, artist, position)
                 VALUES (1, '✺⧳', 1, 1);
