@@ -26,8 +26,8 @@ DECLARE
     suffix TEXT;
     old_release_gid UUID;
     new_release_gid UUID;
-    copy_event_id INTEGER;
-    delete_event_id INTEGER;
+    copy_event_id BIGINT;
+    delete_event_id BIGINT;
 BEGIN
     SELECT cover_art_archive.image_type.suffix, old_release.gid, new_release.gid
     INTO STRICT suffix, old_release_gid, new_release_gid
@@ -55,11 +55,11 @@ BEGIN
         ))
         RETURNING id INTO STRICT copy_event_id;
 
-        INSERT INTO artwork_indexer.event_queue (entity_type, action, message, depends_on) VALUES ('release', 'delete_image', jsonb_build_object('artwork_id', OLD.id, 'gid', old_release_gid, 'suffix', suffix), array[copy_event_id]::integer[]) RETURNING id INTO STRICT delete_event_id;
+        INSERT INTO artwork_indexer.event_queue (entity_type, action, message, depends_on) VALUES ('release', 'delete_image', jsonb_build_object('artwork_id', OLD.id, 'gid', old_release_gid, 'suffix', suffix), array[copy_event_id]) RETURNING id INTO STRICT delete_event_id;
 
         -- If there's an existing, queued index event, reset its parent to our
         -- deletion event (i.e. delay it until after the deletion executes).
-        INSERT INTO artwork_indexer.event_queue (entity_type, action, message, depends_on) VALUES ('release', 'index', jsonb_build_object('gid', old_release_gid), array[delete_event_id]::integer[]), ('release', 'index', jsonb_build_object('gid', new_release_gid), array[delete_event_id]::integer[]) ON CONFLICT (entity_type, action, message) WHERE state = 'queued' DO UPDATE SET depends_on = (coalesce(artwork_indexer.event_queue.depends_on, '{}') || delete_event_id);
+        INSERT INTO artwork_indexer.event_queue (entity_type, action, message, depends_on) VALUES ('release', 'index', jsonb_build_object('gid', old_release_gid), array[delete_event_id]), ('release', 'index', jsonb_build_object('gid', new_release_gid), array[delete_event_id]) ON CONFLICT (entity_type, action, message) WHERE state = 'queued' DO UPDATE SET depends_on = (coalesce(artwork_indexer.event_queue.depends_on, '{}') || delete_event_id);
     ELSE
         INSERT INTO artwork_indexer.event_queue (entity_type, action, message) VALUES ('release', 'index', jsonb_build_object('gid', old_release_gid)), ('release', 'index', jsonb_build_object('gid', new_release_gid)) ON CONFLICT DO NOTHING;
     END IF;
@@ -73,7 +73,7 @@ RETURNS trigger AS $$
 DECLARE
     suffix TEXT;
     release_gid UUID;
-    delete_event_id INTEGER;
+    delete_event_id BIGINT;
 BEGIN
     SELECT cover_art_archive.image_type.suffix, musicbrainz.release.gid
     INTO STRICT suffix, release_gid
@@ -82,7 +82,7 @@ BEGIN
     WHERE musicbrainz.release.id = OLD.release;
 
     INSERT INTO artwork_indexer.event_queue (entity_type, action, message) VALUES ('release', 'delete_image', jsonb_build_object('artwork_id', OLD.id, 'gid', release_gid, 'suffix', suffix)) RETURNING id INTO STRICT delete_event_id;
-    INSERT INTO artwork_indexer.event_queue (entity_type, action, message, depends_on) VALUES ('release', 'index', jsonb_build_object('gid', release_gid), array[delete_event_id]::integer[]) ON CONFLICT (entity_type, action, message) WHERE state = 'queued' DO UPDATE SET depends_on = (coalesce(artwork_indexer.event_queue.depends_on, '{}') || delete_event_id);
+    INSERT INTO artwork_indexer.event_queue (entity_type, action, message, depends_on) VALUES ('release', 'index', jsonb_build_object('gid', release_gid), array[delete_event_id]) ON CONFLICT (entity_type, action, message) WHERE state = 'queued' DO UPDATE SET depends_on = (coalesce(artwork_indexer.event_queue.depends_on, '{}') || delete_event_id);
 
     RETURN OLD;
 END;

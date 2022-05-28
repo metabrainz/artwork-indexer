@@ -141,7 +141,7 @@ for project in PROJECTS:
         stmt += ', '.join([
             (
                 f"('{entity_type}', 'index', jsonb_build_object('gid', {gid})" +
-                (f", array[{parent}]::integer[])" if parent else ')')
+                (f", array[{parent}])" if parent else ')')
             ) for gid in gids
         ])
         stmt += ' ON CONFLICT ';
@@ -165,7 +165,7 @@ for project in PROJECTS:
         stmt += f"'suffix', {suffix}"
         stmt += ')'
         if parent:
-            stmt += f", array[{parent}]::integer[]"
+            stmt += f", array[{parent}]"
         stmt += f') RETURNING id INTO STRICT {return_var};'
         return stmt
 
@@ -198,8 +198,8 @@ for project in PROJECTS:
             suffix TEXT;
             old_{entity_type}_gid UUID;
             new_{entity_type}_gid UUID;
-            copy_event_id INTEGER;
-            delete_event_id INTEGER;
+            copy_event_id BIGINT;
+            delete_event_id BIGINT;
         BEGIN
             SELECT {q_image_type_table}.suffix, old_{entity_type}.gid, new_{entity_type}.gid
             INTO STRICT suffix, old_{entity_type}_gid, new_{entity_type}_gid
@@ -245,7 +245,7 @@ for project in PROJECTS:
         DECLARE
             suffix TEXT;
             {entity_type}_gid UUID;
-            delete_event_id INTEGER;
+            delete_event_id BIGINT;
         BEGIN
             SELECT {q_image_type_table}.suffix, {q_entity_table}.gid
             INTO STRICT suffix, {entity_type}_gid

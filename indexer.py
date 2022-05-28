@@ -115,15 +115,6 @@ async def cleanup_events(pg_pool):
                 'Deleted ' + str(deletion_count) + ' event' +
                 ('s' if deletion_count > 1 else '') +
                 ' older than 90 days')
-            await pg_pool.execute(dedent('''
-                SELECT setval(
-                    pg_get_serial_sequence(
-                        'artwork_indexer.event_queue', 'id'),
-                    COALESCE((
-                        SELECT MAX(id) FROM artwork_indexer.event_queue
-                    ), 0) + 1,
-                    FALSE)
-            '''))
 
 
 async def run_event_handler(pg_pool, event, handler, message):
