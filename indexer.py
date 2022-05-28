@@ -313,14 +313,15 @@ def main():
     config.read(args.config)
     signal.signal(signal.SIGHUP, reload_configuration)
 
-    loop = asyncio.get_event_loop()
+    loop = None
     try:
-        loop.run_until_complete(indexer(config, args.maxwait))
+        loop = asyncio.run(indexer(config, args.maxwait))
     except KeyboardInterrupt:
         pass
     finally:
-        loop.stop()
-        loop.close()
+        if loop:
+            loop.stop()
+            loop.close()
 
 
 if __name__ == '__main__':
