@@ -45,26 +45,27 @@ async def handle_event_failure(pg_conn, event, error):
     logging.error(error)
     logging.error(''.join(traceback.format_tb(error.__traceback__)))
 
-    # When an exception occurs, we only mark the event as failed
-    # in two situations:
+    # The 'failed' state strictly means 'will not be retried'. When an
+    # exception occurs, we only mark the event as failed in two
+    # situations:
     #
     #   (1) it's reached MAX_ATTEMPTS
     #
-    #   (2) an identical event with state = 'queued' exists
-    #       (pushed while this one was running)
+    #   (2) an identical event with state = 'queued' exists (pushed
+    #       while this one was running)
     #
-    # Otherwise, the event stays queued and is retried later based
-    # on the number of attempts so far. (See the `indexer` function
-    # below for how this delay calculated.)
+    # Otherwise, the event stays queued and is retried later based on
+    # the number of attempts so far. (See the `indexer` function below
+    # for how this delay calculated.)
     #
-    # 'failed' strictly means 'will not be retried'. An important
-    # reason that we don't mark events as failed while they're waiting
-    # to run again is the UNIQUE INDEX `event_queue_idx_queued_uniq`
-    # only applies where state = 'queued'. We wouldn't want to allow
-    # events to be inserted that duplicate ones that still have
-    # attempts left; that would cause duplicate work at best, and
-    # compounding failures at worst, not to mention bypass any delay in
-    # processing we have on the existing event.
+    # Identical 'queued' events are blocked at the database level by a
+    # UNIQUE INDEX, `event_queue_idx_queued_uniq`. This prevents
+    # duplicate work from being queued, and is why we don't mark events
+    # as 'failed' while they're waiting to be retried: the 'failed'
+    # state would allow a new, identical event to be queued while the
+    # failed event still has attempts left. Besides duplicating work,
+    # this would cause compounding failures at worst, and bypass any
+    # delay in processing we have on the existing event.
 
     await pg_conn.execute(dedent('''
         UPDATE artwork_indexer.event_queue eq
@@ -93,16 +94,14 @@ async def cleanup_events(pg_pool):
     # Cleanup completed events older than 90 days. We only keep these
     # around in case they help with debugging.
     #
-    # Failed events are not cleaned up. These should always be
-    # inspected and dealt with, not ignored and left for deletion.
-    # (After all, it's less likely that they're due to transient server
-    # issues given the number of times we retry them before marking
-    # them as failed.)
+    # Failed events are not cleaned up. These should always be inspected
+    # and dealt with, not ignored and left for deletion. (It's less
+    # likely they're due to transient server issues, because we retry
+    # them a number of times before marking them as failed.)
     #
-    # We clearly don't want to delete queued or running events, either.
-    # It's so unlikely that an event would be in those states for 90
-    # days that we'd *definitely* want to inspect them and find out
-    # why.
+    # We don't want to delete queued or running events that are older
+    # than 90 days: if this occurs, we'd want to inspect them to find
+    # out why they're stuck (ideally before 90 days has passed).
     deletion_tag = await pg_pool.execute(dedent('''
         DELETE FROM artwork_indexer.event_queue
         WHERE state = 'completed'
