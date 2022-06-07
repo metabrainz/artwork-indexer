@@ -79,6 +79,16 @@ EVENT_XML_TEMPLATE = (
     '</metadata>\n'
 )
 
+IMAGE1_JSON = {
+    'approved': False,
+    'back': False,
+    'comment': '❇',
+    'edit': 1,
+    'front': False,
+    'id': 1,
+    'types': [],
+}
+
 
 class MockResponse():
 
@@ -347,19 +357,32 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
 
             INSERT INTO musicbrainz.editor (id, name, password, ha1, email, email_confirm_date)
                 VALUES (10, 'Editor', '{CLEARTEXT}pass', 'b5ba49bbd92eb35ddb35b5acd039440d', 'Editor@example.com', now());
+
+            INSERT INTO musicbrainz.edit (id, editor, type, status, expire_time)
+                VALUES (1, 10, 314, 2, now());
+
+            INSERT INTO musicbrainz.edit_data (edit, data)
+                VALUES (1, '{}');
+
+            INSERT INTO cover_art_archive.cover_art (id, release, mime_type, edit, ordering, comment)
+                VALUES (1, 1, 'image/jpeg', 1, 1, '❇');
+
+            TRUNCATE artwork_indexer.event_queue CASCADE;
+
+            SELECT setval('artwork_indexer.event_queue_id_seq', 1, FALSE);
         '''))
 
     async def asyncTearDown(self):
         await self.pg_conn.execute(dedent('''
             TRUNCATE musicbrainz.artist CASCADE;
+            TRUNCATE musicbrainz.artist_credit CASCADE;
+            TRUNCATE musicbrainz.event CASCADE;
             TRUNCATE musicbrainz.editor CASCADE;
         '''))
         await self.pg_conn.close()
-
-    def _tearDownAsyncioLoop(self):
         if MockClientSession.session:
-            self._asyncioTestLoop.run_until_complete(MockClientSession.session.close())
-        super()._tearDownAsyncioLoop()
+            await MockClientSession.session.close()
+            MockClientSession.session = None
 
     async def get_event_queue(self):
         events = await self.pg_conn.fetch(dedent('''
@@ -370,21 +393,16 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
         return [dict(record_items(x)) for x in events]
 
     @patch('aiohttp.ClientSession', new=MockClientSession)
-    async def test_triggers(self):
-        global LAST_REQUESTS
-        global NEXT_RESPONSES
-
-        # a_ins_cover_art_caa
-
+    async def test_inserting_cover_art(self):
         await self.pg_conn.execute(dedent('''
             INSERT INTO musicbrainz.edit (id, editor, type, status, expire_time)
-                VALUES (1, 10, 314, 2, now());
+                VALUES (2, 10, 314, 2, now());
 
             INSERT INTO musicbrainz.edit_data (edit, data)
-                VALUES (1, '{}');
+                VALUES (2, '{}');
 
             INSERT INTO cover_art_archive.cover_art (id, release, mime_type, edit, ordering, comment)
-                VALUES (1, 1, 'image/jpeg', 1, 1, '❇');
+                VALUES (2, 1, 'image/jpeg', 2, 2, 'page 1');
         '''))
 
         self.assertEqual(await self.get_event_queue(), [
@@ -393,38 +411,45 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
 
         await indexer.indexer(tests_config, 1, max_idle_loops=1)
 
-        IMAGE1_JSON = {
-            'approved': False,
-            'back': False,
-            'comment': '❇',
-            'edit': 1,
-            'front': False,
-            'id': 1,
-            'types': [],
-        }
-
         self.assertEqual(LAST_REQUESTS, [
-            release_index_json_put(RELEASE1_MBID, [IMAGE1_JSON]),
+            release_index_json_put(RELEASE1_MBID, [
+                IMAGE1_JSON,
+                {
+                    'approved': False,
+                    'back': False,
+                    'comment': 'page 1',
+                    'edit': 2,
+                    'front': False,
+                    'id': 2,
+                    'types': [],
+                },
+            ]),
             release_mb_metadata_xml_get(RELEASE1_MBID),
             release_mb_metadata_xml_put(
                 RELEASE1_MBID,
-                RELEASE1_XML.format(caa_count=1),
+                RELEASE1_XML.format(caa_count=2),
             ),
         ])
+
+    @patch('aiohttp.ClientSession', new=MockClientSession)
+    async def test_triggers(self):
+        global LAST_REQUESTS
+        global NEXT_RESPONSES
 
         # a_upd_cover_art_caa
         # a_del_release_caa
 
         await self.pg_conn.execute(dedent('''
             UPDATE cover_art_archive.cover_art
-                SET ordering = 2, comment = ''
+                SET ordering = 3, comment = ''
                 WHERE id = 1
         '''))
 
+        global IMAGE1_JSON
         IMAGE1_JSON['comment'] = ''
 
         self.assertEqual(await self.get_event_queue(), [
-            release_index_event(RELEASE1_MBID, id=2),
+            release_index_event(RELEASE1_MBID, id=1),
         ])
 
         await self.pg_conn.execute(dedent('''
@@ -441,7 +466,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(await self.get_event_queue(), [
             {
-                'id': 6,
+                'id': 5,
                 'state': 'queued',
                 'entity_type': 'release',
                 'action': 'copy_image',
@@ -455,7 +480,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
                 'attempts': 0,
             },
             {
-                'id': 7,
+                'id': 6,
                 'state': 'queued',
                 'entity_type': 'release',
                 'action': 'delete_image',
@@ -464,12 +489,12 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
                     'gid': RELEASE1_MBID,
                     'suffix': 'jpg',
                 },
-                'depends_on': [6],
+                'depends_on': [5],
                 'attempts': 0,
             },
-            release_index_event(RELEASE2_MBID, id=9, depends_on=[7]),
+            release_index_event(RELEASE2_MBID, id=8, depends_on=[6]),
             {
-                'id': 10,
+                'id': 9,
                 'state': 'queued',
                 'entity_type': 'release',
                 'action': 'deindex',
@@ -493,7 +518,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(await self.get_event_queue(), [
             {
-                'id': 6,
+                'id': 5,
                 'state': 'failed',
                 'entity_type': 'release',
                 'action': 'copy_image',
@@ -507,7 +532,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
                 'attempts': 5,
             },
             {
-                'id': 7,
+                'id': 6,
                 'state': 'queued',
                 'entity_type': 'release',
                 'action': 'delete_image',
@@ -516,17 +541,17 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
                     'gid': RELEASE1_MBID,
                     'suffix': 'jpg',
                 },
-                'depends_on': [6],
+                'depends_on': [5],
                 'attempts': 0,
             },
-            release_index_event(RELEASE2_MBID, id=9, depends_on=[7]),
+            release_index_event(RELEASE2_MBID, id=8, depends_on=[6]),
         ])
 
         self.assertEqual(
             await self.pg_conn.fetchval(dedent('''
                 SELECT failure_reason
                 FROM artwork_indexer.event_failure_reason
-                WHERE event = 6
+                WHERE event = 5
             ''')),
             'HTTP 400',
         )
@@ -619,7 +644,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
         # a_ins_cover_art_type_caa
 
         await release2_reindex_test(
-            event_id=11,
+            event_id=10,
             sql_query=dedent('''
                 INSERT INTO cover_art_archive.cover_art_type (id, type_id)
                     VALUES (1, 1), (1, 2);
@@ -631,7 +656,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
         # a_del_cover_art_type_caa
 
         await release2_reindex_test(
-            event_id=13,
+            event_id=12,
             sql_query=dedent('''
                 DELETE FROM cover_art_archive.cover_art_type
                     WHERE id = 1 AND type_id = 2
@@ -643,7 +668,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
         # a_upd_artist_caa
 
         await release2_reindex_test(
-            event_id=14,
+            event_id=13,
             sql_query=dedent('''
                 UPDATE artist
                     SET name = 'foo', sort_name = 'bar'
@@ -655,7 +680,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
         # a_upd_release_caa
 
         await release2_reindex_test(
-            event_id=15,
+            event_id=14,
             sql_query=dedent('''
                 UPDATE release
                     SET name = 'updated name'
@@ -667,7 +692,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
         # a_upd_release_meta_caa
 
         await release2_reindex_test(
-            event_id=16,
+            event_id=15,
             sql_query=dedent('''
                 UPDATE release_meta
                     SET amazon_asin = 'FOOBAR123'
@@ -679,7 +704,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
         # a_ins_release_first_release_date_caa
 
         await release2_reindex_test(
-            event_id=17,
+            event_id=16,
             sql_query=dedent('''
                 INSERT INTO release_unknown_country
                     VALUES (2, 1990, 1, 1);
@@ -699,7 +724,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
         # a_del_release_first_release_date_caa
 
         await release2_reindex_test(
-            event_id=18,
+            event_id=17,
             sql_query=dedent('''
                 DELETE FROM release_unknown_country WHERE release = 2;
             '''),
@@ -721,7 +746,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(await self.get_event_queue(), [
             {
-                'id': 19,
+                'id': 18,
                 'state': 'queued',
                 'entity_type': 'release',
                 'action': 'delete_image',
@@ -733,7 +758,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
                 'depends_on': None,
                 'attempts': 0,
             },
-            release_index_event(RELEASE2_MBID, id=20, depends_on=[19]),
+            release_index_event(RELEASE2_MBID, id=19, depends_on=[18]),
         ])
 
         await indexer.indexer(tests_config, 1, max_idle_loops=1)
@@ -791,7 +816,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
         }
 
         self.assertEqual(await self.get_event_queue(), [
-            event_index_event(EVENT1_MBID, id=21),
+            event_index_event(EVENT1_MBID, id=20),
         ])
 
         LAST_REQUESTS = []
