@@ -259,6 +259,12 @@ def event_image_copy_put(source_mbid, target_mbid, image_id):
 class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self):
+        global LAST_REQUESTS
+        global NEXT_RESPONSES
+
+        LAST_REQUESTS = []
+        NEXT_RESPONSES = []
+
         self.pg_conn = await asyncpg.connect(**tests_config['database'])
 
     async def asyncTearDown(self):
