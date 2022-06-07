@@ -258,6 +258,12 @@ def event_image_copy_put(source_mbid, target_mbid, image_id):
 
 class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
 
+    async def asyncSetUp(self):
+        self.pg_conn = await asyncpg.connect(**tests_config['database'])
+
+    async def asyncTearDown(self):
+        await self.pg_conn.close()
+
     def _tearDownAsyncioLoop(self):
         if MockClientSession.session:
             self._asyncioTestLoop.run_until_complete(MockClientSession.session.close())
@@ -268,10 +274,8 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
         global LAST_REQUESTS
         global NEXT_RESPONSES
 
-        pg_conn = await asyncpg.connect(**tests_config['database'])
-
         async def get_event_queue():
-            events = await pg_conn.fetch(dedent('''
+            events = await self.pg_conn.fetch(dedent('''
                 SELECT * FROM artwork_indexer.event_queue
                 WHERE state != 'completed'
                 ORDER BY id
@@ -322,7 +326,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
 
         # a_ins_cover_art_caa
 
-        await pg_conn.execute(dedent('''
+        await self.pg_conn.execute(dedent('''
             INSERT INTO musicbrainz.artist (id, gid, name, sort_name)
                 VALUES (1, 'ae859a2d-5754-4e88-9af0-6df263345535', '🀽', '🀽');
 
@@ -379,7 +383,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
         # a_upd_cover_art_caa
         # a_del_release_caa
 
-        await pg_conn.execute(dedent('''
+        await self.pg_conn.execute(dedent('''
             UPDATE cover_art_archive.cover_art
                 SET ordering = 2, comment = ''
                 WHERE id = 1
@@ -393,7 +397,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
 
         RELEASE2_MBID = '2198f7b1-658c-4217-8cae-f63abe0b2391'
 
-        await pg_conn.execute(dedent('''
+        await self.pg_conn.execute(dedent('''
             INSERT INTO musicbrainz.release (id, gid, name, release_group, artist_credit)
                 VALUES (2, '2198f7b1-658c-4217-8cae-f63abe0b2391', 'new release', 1, 1);
 
@@ -451,7 +455,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
         # Make the copy fail.
         NEXT_RESPONSES.append(MockResponse(status=400))
 
-        await pg_conn.execute(dedent('''
+        await self.pg_conn.execute(dedent('''
             UPDATE artwork_indexer.event_queue
             SET attempts = 4, last_updated = (now() - interval '1 day')
             WHERE action = 'copy_image'
@@ -492,7 +496,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
         ])
 
         self.assertEqual(
-            await pg_conn.fetchval(dedent('''
+            await self.pg_conn.fetchval(dedent('''
                 SELECT failure_reason
                 FROM artwork_indexer.event_failure_reason
                 WHERE event = 6
@@ -515,7 +519,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
         ])
 
         # Revert the artificial failure we created.
-        await pg_conn.execute(dedent('''
+        await self.pg_conn.execute(dedent('''
             UPDATE artwork_indexer.event_queue
             SET attempts = 0, state = 'queued'
             WHERE action = 'copy_image'
@@ -561,7 +565,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
                 sql_query='',
                 image_json_props=None,
                 xml_fmt_args=None):
-            await pg_conn.execute(sql_query)
+            await self.pg_conn.execute(sql_query)
 
             global LAST_REQUESTS
             LAST_REQUESTS = []
@@ -677,7 +681,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
 
         # a_del_cover_art_caa
 
-        await pg_conn.execute(dedent('''
+        await self.pg_conn.execute(dedent('''
             DELETE FROM cover_art_archive.cover_art
                 WHERE id = 1
         '''))
@@ -739,7 +743,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
             '</metadata>\n'
         )
 
-        await pg_conn.execute(dedent('''
+        await self.pg_conn.execute(dedent('''
             INSERT INTO musicbrainz.event (id, gid, name, begin_date_year, end_date_year, time, type)
                 VALUES (1, 'e2aad65a-12e0-44ec-b693-94d225154e90', 'live at the place', 1990, 1990, '20:00', 1);
 
@@ -788,8 +792,6 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
             event_mb_metadata_xml_get(EVENT1_MBID),
             event_mb_metadata_xml_put(EVENT1_MBID, EVENT1_XML),
         ])
-
-        await pg_conn.close()
 
 
 if __name__ == '__main__':
