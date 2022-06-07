@@ -267,7 +267,35 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
 
         self.pg_conn = await asyncpg.connect(**tests_config['database'])
 
+        await self.pg_conn.execute(dedent('''
+            INSERT INTO musicbrainz.artist (id, gid, name, sort_name)
+                VALUES (1, 'ae859a2d-5754-4e88-9af0-6df263345535', '🀽', '🀽');
+
+            INSERT INTO musicbrainz.artist_credit (id, gid, name, artist_count)
+                VALUES (1, '87d69648-5604-4237-929d-6d2774867811', '✺⧳', 1);
+
+            INSERT INTO musicbrainz.artist_credit_name (artist_credit, name, artist, position)
+                VALUES (1, '✺⧳', 1, 1);
+
+            INSERT INTO musicbrainz.release_group (id, gid, name, artist_credit)
+                VALUES (1, '9fc47cc7-7a57-4248-b194-75cacadd3646', '⟦⯛', 1);
+
+            INSERT INTO musicbrainz.release (id, gid, name, release_group, artist_credit)
+                VALUES (1, '16ebbc86-670c-4ad3-980b-bfbd1eee4ff4', 'ⶵ⮮', 1, 1),
+                       (2, '2198f7b1-658c-4217-8cae-f63abe0b2391', 'new release', 1, 1);
+
+            INSERT INTO musicbrainz.event (id, gid, name, begin_date_year, end_date_year, time, type)
+                VALUES (1, 'e2aad65a-12e0-44ec-b693-94d225154e90', 'live at the place', 1990, 1990, '20:00', 1);
+
+            INSERT INTO musicbrainz.editor (id, name, password, ha1, email, email_confirm_date)
+                VALUES (10, 'Editor', '{CLEARTEXT}pass', 'b5ba49bbd92eb35ddb35b5acd039440d', 'Editor@example.com', now());
+        '''))
+
     async def asyncTearDown(self):
+        await self.pg_conn.execute(dedent('''
+            TRUNCATE musicbrainz.artist CASCADE;
+            TRUNCATE musicbrainz.editor CASCADE;
+        '''))
         await self.pg_conn.close()
 
     def _tearDownAsyncioLoop(self):
@@ -333,24 +361,6 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
         # a_ins_cover_art_caa
 
         await self.pg_conn.execute(dedent('''
-            INSERT INTO musicbrainz.artist (id, gid, name, sort_name)
-                VALUES (1, 'ae859a2d-5754-4e88-9af0-6df263345535', '🀽', '🀽');
-
-            INSERT INTO musicbrainz.artist_credit (id, gid, name, artist_count)
-                VALUES (1, '87d69648-5604-4237-929d-6d2774867811', '✺⧳', 1);
-
-            INSERT INTO musicbrainz.artist_credit_name (artist_credit, name, artist, position)
-                VALUES (1, '✺⧳', 1, 1);
-
-            INSERT INTO musicbrainz.release_group (id, gid, name, artist_credit)
-                VALUES (1, '9fc47cc7-7a57-4248-b194-75cacadd3646', '⟦⯛', 1);
-
-            INSERT INTO musicbrainz.release (id, gid, name, release_group, artist_credit)
-                VALUES (1, '16ebbc86-670c-4ad3-980b-bfbd1eee4ff4', 'ⶵ⮮', 1, 1);
-
-            INSERT INTO musicbrainz.editor (id, name, password, ha1, email, email_confirm_date)
-                VALUES (10, 'Editor', '{CLEARTEXT}pass', 'b5ba49bbd92eb35ddb35b5acd039440d', 'Editor@example.com', now());
-
             INSERT INTO musicbrainz.edit (id, editor, type, status, expire_time)
                 VALUES (1, 10, 314, 2, now());
 
@@ -404,9 +414,6 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
         RELEASE2_MBID = '2198f7b1-658c-4217-8cae-f63abe0b2391'
 
         await self.pg_conn.execute(dedent('''
-            INSERT INTO musicbrainz.release (id, gid, name, release_group, artist_credit)
-                VALUES (2, '2198f7b1-658c-4217-8cae-f63abe0b2391', 'new release', 1, 1);
-
             UPDATE cover_art_archive.cover_art
                 SET release = 2
                 WHERE id = 1;
@@ -750,9 +757,6 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
         )
 
         await self.pg_conn.execute(dedent('''
-            INSERT INTO musicbrainz.event (id, gid, name, begin_date_year, end_date_year, time, type)
-                VALUES (1, 'e2aad65a-12e0-44ec-b693-94d225154e90', 'live at the place', 1990, 1990, '20:00', 1);
-
             INSERT INTO musicbrainz.edit (id, editor, type, status, expire_time)
                 -- FIXME: there's no $EDIT_EVENT_ADD_EVENT_ART in MB yet, so we're
                 -- reusing 314.
