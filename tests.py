@@ -269,18 +269,18 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
             self._asyncioTestLoop.run_until_complete(MockClientSession.session.close())
         super()._tearDownAsyncioLoop()
 
+    async def get_event_queue(self):
+        events = await self.pg_conn.fetch(dedent('''
+            SELECT * FROM artwork_indexer.event_queue
+            WHERE state != 'completed'
+            ORDER BY id
+        '''))
+        return [dict(record_items(x)) for x in events]
+
     @patch('aiohttp.ClientSession', new=MockClientSession)
     async def test_triggers(self):
         global LAST_REQUESTS
         global NEXT_RESPONSES
-
-        async def get_event_queue():
-            events = await self.pg_conn.fetch(dedent('''
-                SELECT * FROM artwork_indexer.event_queue
-                WHERE state != 'completed'
-                ORDER BY id
-            '''))
-            return [dict(record_items(x)) for x in events]
 
         RELEASE_XML = (
             '<?xml version="1.0" encoding="UTF-8"?>\n'
@@ -355,7 +355,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
                 VALUES (1, 1, 'image/jpeg', 1, 1, '❇');
         '''))
 
-        self.assertEqual(await get_event_queue(), [
+        self.assertEqual(await self.get_event_queue(), [
             release_index_event(RELEASE1_MBID, id=1),
         ])
 
@@ -391,7 +391,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
 
         IMAGE1_JSON['comment'] = ''
 
-        self.assertEqual(await get_event_queue(), [
+        self.assertEqual(await self.get_event_queue(), [
             release_index_event(RELEASE1_MBID, id=2),
         ])
 
@@ -412,7 +412,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
             DELETE FROM release WHERE id = 1;
         '''))
 
-        self.assertEqual(await get_event_queue(), [
+        self.assertEqual(await self.get_event_queue(), [
             {
                 'id': 6,
                 'state': 'queued',
@@ -464,7 +464,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
         LAST_REQUESTS = []
         await indexer.indexer(tests_config, 1, max_idle_loops=1)
 
-        self.assertEqual(await get_event_queue(), [
+        self.assertEqual(await self.get_event_queue(), [
             {
                 'id': 6,
                 'state': 'failed',
@@ -577,7 +577,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
                 RELEASE2_XML_FMT_ARGS.update(xml_fmt_args)
                 RELEASE2_XML = RELEASE_XML.format(**RELEASE2_XML_FMT_ARGS)
 
-            self.assertEqual(await get_event_queue(), [
+            self.assertEqual(await self.get_event_queue(), [
                 release_index_event(RELEASE2_MBID, id=event_id),
             ])
 
@@ -692,7 +692,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
         RELEASE2_XML_FMT_ARGS['is_front'] = 'false'
         RELEASE2_XML = RELEASE_XML.format(**RELEASE2_XML_FMT_ARGS)
 
-        self.assertEqual(await get_event_queue(), [
+        self.assertEqual(await self.get_event_queue(), [
             {
                 'id': 19,
                 'state': 'queued',
@@ -780,7 +780,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
             'types': [],
         }
 
-        self.assertEqual(await get_event_queue(), [
+        self.assertEqual(await self.get_event_queue(), [
             event_index_event(EVENT1_MBID, id=21),
         ])
 
