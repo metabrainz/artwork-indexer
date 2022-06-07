@@ -431,6 +431,23 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
             ),
         ])
 
+    async def test_duplicate_updates(self):
+        """
+        Test that duplicate index events are not instered.
+        """
+        global LAST_REQUESTS
+        global NEXT_RESPONSES
+
+        await self.pg_conn.execute(dedent('''
+            UPDATE musicbrainz.release SET name = 'update' WHERE id = 1;
+            UPDATE cover_art_archive.cover_art SET comment = 'a' WHERE id = 1;
+            UPDATE cover_art_archive.cover_art SET comment = 'b' WHERE id = 1;
+        '''))
+
+        self.assertEqual(await self.get_event_queue(), [
+            release_index_event(RELEASE1_MBID, id=1),
+        ])
+
     @patch('aiohttp.ClientSession', new=MockClientSession)
     async def test_triggers(self):
         global LAST_REQUESTS
