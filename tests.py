@@ -789,6 +789,8 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
             event_mb_metadata_xml_put(EVENT1_MBID, EVENT1_XML),
         ])
 
+        await pg_conn.close()
+
 
 if __name__ == '__main__':
     unittest.main()
