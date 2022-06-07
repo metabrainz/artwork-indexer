@@ -21,6 +21,64 @@ MBS_TEST_NETLOC = urlparse(MBS_TEST_URL).netloc
 NEXT_RESPONSES = []
 LAST_REQUESTS = []
 
+RELEASE_XML_TEMPLATE = (
+    '<?xml version="1.0" encoding="UTF-8"?>\n'
+    '<metadata xmlns="http://musicbrainz.org/ns/mmd-2.0#">'
+        '<release id="{mbid}">'
+            '<title>{title}</title>'
+            '<quality>normal</quality>'
+            '<artist-credit>'
+                '<name-credit>'
+                    '<name>{artist_credited_name}</name>'
+                    '<artist id="ae859a2d-5754-4e88-9af0-6df263345535">'
+                        '<name>{artist_name}</name>'
+                        '<sort-name>{artist_sort_name}</sort-name>'
+                    '</artist>'
+                '</name-credit>'
+            '</artist-credit>'
+            '{release_event_xml}'
+            '{asin_xml}'
+            '<cover-art-archive>'
+                '<artwork>{has_artwork}</artwork>'
+                '<count>{caa_count}</count>'
+                '<front>{is_front}</front>'
+                '<back>{is_back}</back>'
+            '</cover-art-archive>'
+        '</release>'
+    '</metadata>\n'
+)
+
+RELEASE1_MBID = '16ebbc86-670c-4ad3-980b-bfbd1eee4ff4'
+RELEASE2_MBID = '2198f7b1-658c-4217-8cae-f63abe0b2391'
+
+RELEASE1_XML = RELEASE_XML_TEMPLATE.format(
+    mbid=RELEASE1_MBID,
+    title='ⶵ⮮',
+    artist_name='🀽',
+    artist_sort_name='🀽',
+    artist_credited_name='✺⧳',
+    release_event_xml='',
+    asin_xml='',
+    has_artwork='true',
+    caa_count='{caa_count}',
+    is_front='false',
+    is_back='false',
+)
+
+EVENT_XML_TEMPLATE = (
+    '<?xml version="1.0" encoding="UTF-8"?>\n'
+    '<metadata xmlns="http://musicbrainz.org/ns/mmd-2.0#">'
+        '<event id="{mbid}" type="{type_name}" type-id="{type_id}">'
+            '<name>{name}</name>'
+            '<life-span>'
+                '<begin>{begin}</begin>'
+                '<end>{end}</end>'
+            '</life-span>'
+            '<time>{time}</time>'
+        '</event>'
+    '</metadata>\n'
+)
+
 
 class MockResponse():
 
@@ -316,48 +374,6 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
         global LAST_REQUESTS
         global NEXT_RESPONSES
 
-        RELEASE_XML = (
-            '<?xml version="1.0" encoding="UTF-8"?>\n'
-            '<metadata xmlns="http://musicbrainz.org/ns/mmd-2.0#">'
-                '<release id="{mbid}">'
-                    '<title>{title}</title>'
-                    '<quality>normal</quality>'
-                    '<artist-credit>'
-                        '<name-credit>'
-                            '<name>{artist_credited_name}</name>'
-                            '<artist id="ae859a2d-5754-4e88-9af0-6df263345535">'
-                                '<name>{artist_name}</name>'
-                                '<sort-name>{artist_sort_name}</sort-name>'
-                            '</artist>'
-                        '</name-credit>'
-                    '</artist-credit>'
-                    '{release_event_xml}'
-                    '{asin_xml}'
-                    '<cover-art-archive>'
-                        '<artwork>{has_artwork}</artwork>'
-                        '<count>{caa_count}</count>'
-                        '<front>{is_front}</front>'
-                        '<back>{is_back}</back>'
-                    '</cover-art-archive>'
-                '</release>'
-            '</metadata>\n'
-        )
-
-        RELEASE1_MBID = '16ebbc86-670c-4ad3-980b-bfbd1eee4ff4'
-        RELEASE1_XML = RELEASE_XML.format(
-            mbid=RELEASE1_MBID,
-            title='ⶵ⮮',
-            artist_name='🀽',
-            artist_sort_name='🀽',
-            artist_credited_name='✺⧳',
-            release_event_xml='',
-            asin_xml='',
-            has_artwork='true',
-            caa_count='{caa_count}',
-            is_front='false',
-            is_back='false',
-        )
-
         # a_ins_cover_art_caa
 
         await self.pg_conn.execute(dedent('''
@@ -410,8 +426,6 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.get_event_queue(), [
             release_index_event(RELEASE1_MBID, id=2),
         ])
-
-        RELEASE2_MBID = '2198f7b1-658c-4217-8cae-f63abe0b2391'
 
         await self.pg_conn.execute(dedent('''
             UPDATE cover_art_archive.cover_art
@@ -552,7 +566,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
             'is_front': 'false',
             'is_back': 'false',
         }
-        RELEASE2_XML = RELEASE_XML.format(**RELEASE2_XML_FMT_ARGS)
+        RELEASE2_XML = RELEASE_XML_TEMPLATE.format(**RELEASE2_XML_FMT_ARGS)
 
         await indexer.indexer(tests_config, 1, max_idle_loops=1)
 
@@ -588,7 +602,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
 
             if xml_fmt_args:
                 RELEASE2_XML_FMT_ARGS.update(xml_fmt_args)
-                RELEASE2_XML = RELEASE_XML.format(**RELEASE2_XML_FMT_ARGS)
+                RELEASE2_XML = RELEASE_XML_TEMPLATE.format(**RELEASE2_XML_FMT_ARGS)
 
             self.assertEqual(await self.get_event_queue(), [
                 release_index_event(RELEASE2_MBID, id=event_id),
@@ -703,7 +717,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
         RELEASE2_XML_FMT_ARGS['has_artwork'] = 'false'
         RELEASE2_XML_FMT_ARGS['caa_count'] = '0'
         RELEASE2_XML_FMT_ARGS['is_front'] = 'false'
-        RELEASE2_XML = RELEASE_XML.format(**RELEASE2_XML_FMT_ARGS)
+        RELEASE2_XML = RELEASE_XML_TEMPLATE.format(**RELEASE2_XML_FMT_ARGS)
 
         self.assertEqual(await self.get_event_queue(), [
             {
@@ -742,20 +756,6 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
 
         # Event Art Archive
 
-        EVENT_XML = (
-            '<?xml version="1.0" encoding="UTF-8"?>\n'
-            '<metadata xmlns="http://musicbrainz.org/ns/mmd-2.0#">'
-                '<event id="{mbid}" type="{type_name}" type-id="{type_id}">'
-                    '<name>{name}</name>'
-                    '<life-span>'
-                        '<begin>{begin}</begin>'
-                        '<end>{end}</end>'
-                    '</life-span>'
-                    '<time>{time}</time>'
-                '</event>'
-            '</metadata>\n'
-        )
-
         await self.pg_conn.execute(dedent('''
             INSERT INTO musicbrainz.edit (id, editor, type, status, expire_time)
                 -- FIXME: there's no $EDIT_EVENT_ADD_EVENT_ART in MB yet, so we're
@@ -771,7 +771,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
 
         EVENT1_MBID = 'e2aad65a-12e0-44ec-b693-94d225154e90'
 
-        EVENT1_XML = EVENT_XML.format(
+        EVENT1_XML = EVENT_XML_TEMPLATE.format(
             mbid=EVENT1_MBID,
             name='live at the place',
             type_name='Concert',
