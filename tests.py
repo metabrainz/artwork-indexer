@@ -420,16 +420,11 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
 
         global LAST_REQUESTS
         global RELEASE2_XML_FMT_ARGS
-        global RELEASE2_XML
 
         LAST_REQUESTS = []
 
         if image_json_props:
             IMAGE1_JSON.update(image_json_props)
-
-        if xml_fmt_args:
-            RELEASE2_XML_FMT_ARGS.update(xml_fmt_args)
-            RELEASE2_XML = RELEASE_XML_TEMPLATE.format(**RELEASE2_XML_FMT_ARGS)
 
         self.assertEqual(await self.get_event_queue(), [
             release_index_event(RELEASE2_MBID, id=event_id),
@@ -440,7 +435,12 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(LAST_REQUESTS, [
             release_index_json_put(RELEASE2_MBID, [IMAGE1_JSON]),
             release_mb_metadata_xml_get(RELEASE2_MBID),
-            release_mb_metadata_xml_put(RELEASE2_MBID, RELEASE2_XML),
+            release_mb_metadata_xml_put(
+                RELEASE2_MBID,
+                RELEASE_XML_TEMPLATE.format(
+                    **(RELEASE2_XML_FMT_ARGS | (xml_fmt_args or {}))
+                )
+            ),
         ])
 
     @patch('aiohttp.ClientSession', new=MockClientSession)
@@ -512,6 +512,38 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
                 RELEASE1_MBID,
                 RELEASE_XML_TEMPLATE.format(
                     **(RELEASE1_XML_FMT_ARGS | {'is_back': 'true'})
+                )
+            ),
+        ])
+
+    @patch('aiohttp.ClientSession', new=MockClientSession)
+    async def test_deleting_cover_art_type(self):
+        """
+        Test deleting a cover art type (a_del_cover_art_type_caa).
+        """
+        await self.pg_conn.execute(dedent('''
+            DELETE FROM cover_art_archive.cover_art_type
+                WHERE id = 1 AND type_id = 1
+        '''))
+
+        self.assertEqual(await self.get_event_queue(), [
+            release_index_event(RELEASE1_MBID, id=1),
+        ])
+
+        await indexer.indexer(tests_config, 1, max_idle_loops=1)
+
+        self.assertEqual(LAST_REQUESTS, [
+            release_index_json_put(RELEASE1_MBID, [
+                (IMAGE1_JSON | {
+                    'front': False,
+                    'types': [],
+                })
+            ]),
+            release_mb_metadata_xml_get(RELEASE1_MBID),
+            release_mb_metadata_xml_put(
+                RELEASE1_MBID,
+                RELEASE_XML_TEMPLATE.format(
+                    **(RELEASE1_XML_FMT_ARGS | {'is_front': 'false'})
                 )
             ),
         ])
@@ -680,9 +712,6 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
         '''))
 
         LAST_REQUESTS = []
-        RELEASE2_XML = RELEASE_XML_TEMPLATE.format(
-            **(RELEASE2_XML_FMT_ARGS | {'is_front': 'true'})
-        )
 
         await indexer.indexer(tests_config, 1, max_idle_loops=1)
 
@@ -700,66 +729,79 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
             },
             release_index_json_put(RELEASE2_MBID, [IMAGE1_JSON]),
             release_mb_metadata_xml_get(RELEASE2_MBID),
-            release_mb_metadata_xml_put(RELEASE2_MBID, RELEASE2_XML),
+            release_mb_metadata_xml_put(
+                RELEASE2_MBID,
+                RELEASE_XML_TEMPLATE.format(
+                   **(RELEASE2_XML_FMT_ARGS | {'is_front': 'true'})
+                )
+            ),
         ])
-
-        # a_del_cover_art_type_caa
-
-        await self.release2_reindex_test(
-            event_id=10,
-            sql_query=dedent('''
-                DELETE FROM cover_art_archive.cover_art_type
-                    WHERE id = 1 AND type_id = 1
-            '''),
-            image_json_props={'front': False, 'types': []},
-            xml_fmt_args={'is_front': 'false'},
-        )
 
         # a_upd_artist_caa
 
         await self.release2_reindex_test(
-            event_id=11,
+            event_id=10,
             sql_query=dedent('''
                 UPDATE artist
                     SET name = 'foo', sort_name = 'bar'
                     WHERE id = 1;
             '''),
-            xml_fmt_args={'artist_name': 'foo', 'artist_sort_name': 'bar'},
+            xml_fmt_args={
+                'is_front': 'true',
+                'artist_name': 'foo',
+                'artist_sort_name': 'bar',
+            },
         )
 
         # a_upd_release_caa
 
         await self.release2_reindex_test(
-            event_id=12,
+            event_id=11,
             sql_query=dedent('''
                 UPDATE release
                     SET name = 'updated name'
                     WHERE id = 2
             '''),
-            xml_fmt_args={'title': 'updated name'},
+            xml_fmt_args={
+                'is_front': 'true',
+                'artist_name': 'foo',
+                'artist_sort_name': 'bar',
+                'title': 'updated name',
+            },
         )
 
         # a_upd_release_meta_caa
 
         await self.release2_reindex_test(
-            event_id=13,
+            event_id=12,
             sql_query=dedent('''
                 UPDATE release_meta
                     SET amazon_asin = 'FOOBAR123'
                     WHERE id = 2
             '''),
-            xml_fmt_args={'asin_xml': '<asin>FOOBAR123</asin>'},
+            xml_fmt_args={
+                'is_front': 'true',
+                'artist_name': 'foo',
+                'artist_sort_name': 'bar',
+                'title': 'updated name',
+                'asin_xml': '<asin>FOOBAR123</asin>',
+            },
         )
 
         # a_ins_release_first_release_date_caa
 
         await self.release2_reindex_test(
-            event_id=14,
+            event_id=13,
             sql_query=dedent('''
                 INSERT INTO release_unknown_country
                     VALUES (2, 1990, 1, 1);
             '''),
             xml_fmt_args={
+                'is_front': 'true',
+                'artist_name': 'foo',
+                'artist_sort_name': 'bar',
+                'title': 'updated name',
+                'asin_xml': '<asin>FOOBAR123</asin>',
                 'release_event_xml': (
                     '<date>1990-01-01</date>'
                     '<release-event-list count="1">'
@@ -774,11 +816,17 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
         # a_del_release_first_release_date_caa
 
         await self.release2_reindex_test(
-            event_id=15,
+            event_id=14,
             sql_query=dedent('''
                 DELETE FROM release_unknown_country WHERE release = 2;
             '''),
-            xml_fmt_args={'release_event_xml': ''},
+            xml_fmt_args={
+                'is_front': 'true',
+                'artist_name': 'foo',
+                'artist_sort_name': 'bar',
+                'title': 'updated name',
+                'asin_xml': '<asin>FOOBAR123</asin>',
+            },
         )
 
         # a_del_cover_art_caa
@@ -789,14 +837,10 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
         '''))
 
         LAST_REQUESTS = []
-        RELEASE2_XML_FMT_ARGS['has_artwork'] = 'false'
-        RELEASE2_XML_FMT_ARGS['caa_count'] = '0'
-        RELEASE2_XML_FMT_ARGS['is_front'] = 'false'
-        RELEASE2_XML = RELEASE_XML_TEMPLATE.format(**RELEASE2_XML_FMT_ARGS)
 
         self.assertEqual(await self.get_event_queue(), [
             {
-                'id': 16,
+                'id': 15,
                 'state': 'queued',
                 'entity_type': 'release',
                 'action': 'delete_image',
@@ -808,7 +852,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
                 'depends_on': None,
                 'attempts': 0,
             },
-            release_index_event(RELEASE2_MBID, id=17, depends_on=[16]),
+            release_index_event(RELEASE2_MBID, id=16, depends_on=[15]),
         ])
 
         await indexer.indexer(tests_config, 1, max_idle_loops=1)
@@ -826,7 +870,19 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
             },
             release_index_json_put(RELEASE2_MBID, []),
             release_mb_metadata_xml_get(RELEASE2_MBID),
-            release_mb_metadata_xml_put(RELEASE2_MBID, RELEASE2_XML),
+            release_mb_metadata_xml_put(
+                RELEASE2_MBID,
+                RELEASE_XML_TEMPLATE.format(
+                    **(RELEASE2_XML_FMT_ARGS | {
+                        'caa_count': '0',
+                        'has_artwork': 'false',
+                        'artist_name': 'foo',
+                        'artist_sort_name': 'bar',
+                        'title': 'updated name',
+                        'asin_xml': '<asin>FOOBAR123</asin>',
+                    })
+                )
+            ),
         ])
 
         # Event Art Archive
@@ -866,7 +922,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
         }
 
         self.assertEqual(await self.get_event_queue(), [
-            event_index_event(EVENT1_MBID, id=18),
+            event_index_event(EVENT1_MBID, id=17),
         ])
 
         LAST_REQUESTS = []
