@@ -51,19 +51,21 @@ RELEASE_XML_TEMPLATE = (
 RELEASE1_MBID = '16ebbc86-670c-4ad3-980b-bfbd1eee4ff4'
 RELEASE2_MBID = '2198f7b1-658c-4217-8cae-f63abe0b2391'
 
-RELEASE1_XML = RELEASE_XML_TEMPLATE.format(
-    mbid=RELEASE1_MBID,
-    title='ⶵ⮮',
-    artist_name='🀽',
-    artist_sort_name='🀽',
-    artist_credited_name='✺⧳',
-    release_event_xml='',
-    asin_xml='',
-    has_artwork='true',
-    caa_count='{caa_count}',
-    is_front='false',
-    is_back='false',
-)
+RELEASE1_XML_FMT_ARGS = {
+    'mbid': RELEASE1_MBID,
+    'title': 'ⶵ⮮',
+    'artist_name': '🀽',
+    'artist_sort_name': '🀽',
+    'artist_credited_name': '✺⧳',
+    'release_event_xml': '',
+    'asin_xml': '',
+    'has_artwork': 'true',
+    'caa_count': 1,
+    'is_front': 'true',
+    'is_back': 'false',
+}
+
+RELEASE1_XML = RELEASE_XML_TEMPLATE.format(**RELEASE1_XML_FMT_ARGS)
 
 RELEASE2_XML_FMT_ARGS = {
     'mbid': RELEASE2_MBID,
@@ -98,9 +100,9 @@ IMAGE1_JSON = {
     'back': False,
     'comment': '❇',
     'edit': 1,
-    'front': False,
+    'front': True,
     'id': 1,
-    'types': [],
+    'types': ['Front'],
 }
 
 
@@ -381,6 +383,9 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
             INSERT INTO cover_art_archive.cover_art (id, release, mime_type, edit, ordering, comment)
                 VALUES (1, 1, 'image/jpeg', 1, 1, '❇');
 
+            INSERT INTO cover_art_archive.cover_art_type (id, type_id)
+                VALUES (1, 1);
+
             TRUNCATE artwork_indexer.event_queue CASCADE;
 
             SELECT setval('artwork_indexer.event_queue_id_seq', 1, FALSE);
@@ -473,7 +478,41 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
             release_mb_metadata_xml_get(RELEASE1_MBID),
             release_mb_metadata_xml_put(
                 RELEASE1_MBID,
-                RELEASE1_XML.format(caa_count=2),
+                RELEASE_XML_TEMPLATE.format(
+                    **(RELEASE1_XML_FMT_ARGS | {'caa_count': 2})
+                )
+            ),
+        ])
+
+    @patch('aiohttp.ClientSession', new=MockClientSession)
+    async def test_inserting_cover_art_type(self):
+        """
+        Test inserting a cover art type (a_ins_cover_art_type_caa).
+        """
+        await self.pg_conn.execute(dedent('''
+            INSERT INTO cover_art_archive.cover_art_type (id, type_id)
+                VALUES (1, 2);
+        '''))
+
+        self.assertEqual(await self.get_event_queue(), [
+            release_index_event(RELEASE1_MBID, id=1),
+        ])
+
+        await indexer.indexer(tests_config, 1, max_idle_loops=1)
+
+        self.assertEqual(LAST_REQUESTS, [
+            release_index_json_put(RELEASE1_MBID, [
+                (IMAGE1_JSON | {
+                    'back': True,
+                    'types': ['Front', 'Back'],
+                })
+            ]),
+            release_mb_metadata_xml_get(RELEASE1_MBID),
+            release_mb_metadata_xml_put(
+                RELEASE1_MBID,
+                RELEASE_XML_TEMPLATE.format(
+                    **(RELEASE1_XML_FMT_ARGS | {'is_back': 'true'})
+                )
             ),
         ])
 
@@ -641,7 +680,9 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
         '''))
 
         LAST_REQUESTS = []
-        RELEASE2_XML = RELEASE_XML_TEMPLATE.format(**RELEASE2_XML_FMT_ARGS)
+        RELEASE2_XML = RELEASE_XML_TEMPLATE.format(
+            **(RELEASE2_XML_FMT_ARGS | {'is_front': 'true'})
+        )
 
         await indexer.indexer(tests_config, 1, max_idle_loops=1)
 
@@ -662,34 +703,22 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
             release_mb_metadata_xml_put(RELEASE2_MBID, RELEASE2_XML),
         ])
 
-        # a_ins_cover_art_type_caa
+        # a_del_cover_art_type_caa
 
         await self.release2_reindex_test(
             event_id=10,
             sql_query=dedent('''
-                INSERT INTO cover_art_archive.cover_art_type (id, type_id)
-                    VALUES (1, 1), (1, 2);
-            '''),
-            image_json_props={'front': True, 'back': True, 'types': ['Front', 'Back']},
-            xml_fmt_args={'is_front': 'true', 'is_back': 'true'},
-        )
-
-        # a_del_cover_art_type_caa
-
-        await self.release2_reindex_test(
-            event_id=12,
-            sql_query=dedent('''
                 DELETE FROM cover_art_archive.cover_art_type
-                    WHERE id = 1 AND type_id = 2
+                    WHERE id = 1 AND type_id = 1
             '''),
-            image_json_props={'back': False, 'types': ['Front']},
-            xml_fmt_args={'is_back': 'false'},
+            image_json_props={'front': False, 'types': []},
+            xml_fmt_args={'is_front': 'false'},
         )
 
         # a_upd_artist_caa
 
         await self.release2_reindex_test(
-            event_id=13,
+            event_id=11,
             sql_query=dedent('''
                 UPDATE artist
                     SET name = 'foo', sort_name = 'bar'
@@ -701,7 +730,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
         # a_upd_release_caa
 
         await self.release2_reindex_test(
-            event_id=14,
+            event_id=12,
             sql_query=dedent('''
                 UPDATE release
                     SET name = 'updated name'
@@ -713,7 +742,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
         # a_upd_release_meta_caa
 
         await self.release2_reindex_test(
-            event_id=15,
+            event_id=13,
             sql_query=dedent('''
                 UPDATE release_meta
                     SET amazon_asin = 'FOOBAR123'
@@ -725,7 +754,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
         # a_ins_release_first_release_date_caa
 
         await self.release2_reindex_test(
-            event_id=16,
+            event_id=14,
             sql_query=dedent('''
                 INSERT INTO release_unknown_country
                     VALUES (2, 1990, 1, 1);
@@ -745,7 +774,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
         # a_del_release_first_release_date_caa
 
         await self.release2_reindex_test(
-            event_id=17,
+            event_id=15,
             sql_query=dedent('''
                 DELETE FROM release_unknown_country WHERE release = 2;
             '''),
@@ -767,7 +796,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(await self.get_event_queue(), [
             {
-                'id': 18,
+                'id': 16,
                 'state': 'queued',
                 'entity_type': 'release',
                 'action': 'delete_image',
@@ -779,7 +808,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
                 'depends_on': None,
                 'attempts': 0,
             },
-            release_index_event(RELEASE2_MBID, id=19, depends_on=[18]),
+            release_index_event(RELEASE2_MBID, id=17, depends_on=[16]),
         ])
 
         await indexer.indexer(tests_config, 1, max_idle_loops=1)
@@ -837,7 +866,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
         }
 
         self.assertEqual(await self.get_event_queue(), [
-            event_index_event(EVENT1_MBID, id=20),
+            event_index_event(EVENT1_MBID, id=18),
         ])
 
         LAST_REQUESTS = []
