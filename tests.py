@@ -639,6 +639,7 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
         ])
 
         # Make the copy fail.
+        print('note, the following test is expected to log an HTTP 400 error')
         NEXT_RESPONSES.append(MockResponse(status=400))
 
         await self.pg_conn.execute(dedent('''
