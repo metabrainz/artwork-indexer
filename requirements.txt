@@ -4,6 +4,7 @@ async-timeout==4.0.3
 asyncpg==0.28.0
 attrs==21.4.0
 charset-normalizer==2.0.12
+coverage==7.3.2
 flake8==6.1.0
 frozenlist==1.4.0
 idna==3.3
