@@ -973,6 +973,30 @@ class TestCoverArtArchive(unittest.IsolatedAsyncioTestCase):
             release_index_event(RELEASE1_MBID, id=1),
         ])
 
+    async def test_cleanup(self):
+        await self.pg_conn.execute(dedent('''
+            UPDATE release SET name = 'updated name1' WHERE id = 1;
+        '''))
+
+        await indexer.indexer(tests_config, 1, max_idle_loops=1, http_client_cls=self.http_client_cls)
+
+        event_count = await self.pg_conn.fetchval(dedent('''
+            SELECT count(*) FROM artwork_indexer.event_queue
+        '''))
+        self.assertEqual(event_count, 1)
+
+        await self.pg_conn.execute(dedent('''
+            UPDATE artwork_indexer.event_queue
+            SET created = (created - interval '90 days');
+        '''))
+
+        await indexer.indexer(tests_config, 2, max_idle_loops=2, http_client_cls=self.http_client_cls)
+
+        event_count = await self.pg_conn.fetchval(dedent('''
+            SELECT count(*) FROM artwork_indexer.event_queue
+        '''))
+        self.assertEqual(event_count, 0)
+
     async def test_event_triggers(self):
         # Event Art Archive
 
