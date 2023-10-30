@@ -1,7 +1,5 @@
-import asyncio
 import asyncpg
 import configparser
-import datetime
 import json
 import unittest
 from aiohttp import ClientSession
