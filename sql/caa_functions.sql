@@ -149,7 +149,11 @@ BEGIN
             SELECT 'release', 'index', jsonb_build_object('gid', musicbrainz.release.gid)
             FROM musicbrainz.release
             JOIN musicbrainz.artist_credit_name ON musicbrainz.artist_credit_name.artist_credit = musicbrainz.release.artist_credit
-            WHERE musicbrainz.artist_credit_name.artist = NEW.id
+            WHERE EXISTS (
+                SELECT 1 FROM cover_art_archive.cover_art
+                WHERE cover_art_archive.cover_art.release = musicbrainz.release.id
+            )
+            AND musicbrainz.artist_credit_name.artist = NEW.id
         )
         ON CONFLICT DO NOTHING;
     END IF;
@@ -161,8 +165,15 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION a_upd_release() RETURNS trigger AS $$
 BEGIN
     IF (OLD.name != NEW.name OR OLD.artist_credit != NEW.artist_credit OR OLD.language IS DISTINCT FROM NEW.language OR OLD.barcode IS DISTINCT FROM NEW.barcode) THEN
-        INSERT INTO artwork_indexer.event_queue (entity_type, action, message)
-        VALUES ('release', 'index', jsonb_build_object('gid', NEW.gid))
+        INSERT INTO artwork_indexer.event_queue (entity_type, action, message) (
+            SELECT 'release', 'index', jsonb_build_object('gid', musicbrainz.release.gid)
+            FROM musicbrainz.release
+            WHERE EXISTS (
+                SELECT 1 FROM cover_art_archive.cover_art
+                WHERE cover_art_archive.cover_art.release = musicbrainz.release.id
+            )
+            AND musicbrainz.release.gid = NEW.gid
+        )
         ON CONFLICT DO NOTHING;
     END IF;
 
@@ -176,7 +187,11 @@ BEGIN
         INSERT INTO artwork_indexer.event_queue (entity_type, action, message) (
             SELECT 'release', 'index', jsonb_build_object('gid', musicbrainz.release.gid)
             FROM musicbrainz.release
-            WHERE musicbrainz.release.id = NEW.id
+            WHERE EXISTS (
+                SELECT 1 FROM cover_art_archive.cover_art
+                WHERE cover_art_archive.cover_art.release = musicbrainz.release.id
+            )
+            AND musicbrainz.release.id = NEW.id
         )
         ON CONFLICT DO NOTHING;
     END IF;
@@ -190,7 +205,11 @@ BEGIN
     INSERT INTO artwork_indexer.event_queue (entity_type, action, message) (
         SELECT 'release', 'index', jsonb_build_object('gid', musicbrainz.release.gid)
         FROM musicbrainz.release
-        WHERE musicbrainz.release.id = NEW.release
+        WHERE EXISTS (
+            SELECT 1 FROM cover_art_archive.cover_art
+            WHERE cover_art_archive.cover_art.release = musicbrainz.release.id
+        )
+        AND musicbrainz.release.id = NEW.release
     )
     ON CONFLICT DO NOTHING;
 
@@ -203,7 +222,11 @@ BEGIN
     INSERT INTO artwork_indexer.event_queue (entity_type, action, message) (
         SELECT 'release', 'index', jsonb_build_object('gid', musicbrainz.release.gid)
         FROM musicbrainz.release
-        WHERE musicbrainz.release.id = OLD.release
+        WHERE EXISTS (
+            SELECT 1 FROM cover_art_archive.cover_art
+            WHERE cover_art_archive.cover_art.release = musicbrainz.release.id
+        )
+        AND musicbrainz.release.id = OLD.release
     )
     ON CONFLICT DO NOTHING;
 

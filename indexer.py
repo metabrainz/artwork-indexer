@@ -136,12 +136,17 @@ async def run_event_handler(pg_pool, event, handler, message):
             '''), event['id'])
 
 
-async def indexer(config, maxwait, max_idle_loops=inf):
+async def indexer(
+    config,
+    maxwait,
+    max_idle_loops=inf,
+    http_client_cls=aiohttp.ClientSession
+):
     sleep_amount = 1  # seconds
 
     async with \
             asyncpg.create_pool(**config['database']) as pg_pool, \
-            aiohttp.ClientSession(raise_for_status=True) as http_session:
+            http_client_cls(raise_for_status=True) as http_session:
         event_handler_map = {
             entity: cls(config, http_session)
             for entity, cls in EVENT_HANDLER_CLASSES.items()

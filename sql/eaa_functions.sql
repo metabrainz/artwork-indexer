@@ -145,8 +145,15 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION a_upd_event() RETURNS trigger AS $$
 BEGIN
     IF (OLD.name != NEW.name) THEN
-        INSERT INTO artwork_indexer.event_queue (entity_type, action, message)
-        VALUES ('event', 'index', jsonb_build_object('gid', NEW.gid))
+        INSERT INTO artwork_indexer.event_queue (entity_type, action, message) (
+            SELECT 'event', 'index', jsonb_build_object('gid', musicbrainz.event.gid)
+            FROM musicbrainz.event
+            WHERE EXISTS (
+                SELECT 1 FROM event_art_archive.event_art
+                WHERE event_art_archive.event_art.event = musicbrainz.event.id
+            )
+            AND musicbrainz.event.gid = NEW.gid
+        )
         ON CONFLICT DO NOTHING;
     END IF;
 

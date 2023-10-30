@@ -88,29 +88,36 @@ for project in PROJECTS:
 
             extra_functions_source += f'{indent}INSERT INTO artwork_indexer.event_queue (entity_type, action, message)'
 
+            indent += '    '
+            extra_functions_source += ' (\n'
+            extra_functions_source += f"{indent}SELECT '{entity_type}', 'index', jsonb_build_object('gid', {q_entity_table}.gid)\n"
+            extra_functions_source += f'{indent}FROM {q_entity_table}\n'
+
+            for join in im.get('joins', ()):
+                (lhs_schema, lhs_table, lhs_col) = join['lhs']
+                (rhs_schema, rhs_table, rhs_col) = join['rhs']
+
+                q_lhs_table = f'{lhs_schema}.{lhs_table}'
+                q_rhs_table = f'{rhs_schema}.{rhs_table}'
+
+                extra_functions_source += f'{indent}JOIN {q_lhs_table} ON {q_lhs_table}.{lhs_col} = {q_rhs_table}.{rhs_col}\n'
+
+            extra_functions_source += f'{indent}WHERE EXISTS (\n'
+            indent += '    '
+            extra_functions_source += f'{indent}SELECT 1 FROM {q_art_table}\n'
+            extra_functions_source += f'{indent}WHERE {q_art_table}.{entity_type} = {q_entity_table}.id\n'
+            indent = indent[:-4]
+            extra_functions_source += f'{indent})\n'
+
             if q_im_table == q_entity_table:
-                extra_functions_source += f"\n{indent}VALUES ('{entity_type}', 'index', jsonb_build_object('gid', {tg_rowvar}.gid))\n"
-            else:
-                indent += '    '
-                extra_functions_source += ' (\n'
-                extra_functions_source += f"{indent}SELECT '{entity_type}', 'index', jsonb_build_object('gid', {q_entity_table}.gid)\n"
-                extra_functions_source += f'{indent}FROM {q_entity_table}\n'
+                extra_functions_source += f"{indent}AND {q_entity_table}.gid = {tg_rowvar}.gid\n"
 
-                for join in im.get('joins', ()):
-                    (lhs_schema, lhs_table, lhs_col) = join['lhs']
-                    (rhs_schema, rhs_table, rhs_col) = join['rhs']
+            im_condition = im.get('condition')
+            if im_condition:
+                extra_functions_source += f'{indent}AND {im_condition.format(tg_rowvar=tg_rowvar)}\n'
 
-                    q_lhs_table = f'{lhs_schema}.{lhs_table}'
-                    q_rhs_table = f'{rhs_schema}.{rhs_table}'
-
-                    extra_functions_source += f'{indent}JOIN {q_lhs_table} ON {q_lhs_table}.{lhs_col} = {q_rhs_table}.{rhs_col}\n'
-
-                im_condition = im.get('condition')
-                if im_condition:
-                    extra_functions_source += f'{indent}WHERE {im_condition.format(tg_rowvar=tg_rowvar)}\n'
-
-                indent = indent[:-4]
-                extra_functions_source += f'{indent})\n'
+            indent = indent[:-4]
+            extra_functions_source += f'{indent})\n'
 
             extra_functions_source += f'{indent}ON CONFLICT DO NOTHING;\n'
             if col_comparisons:
