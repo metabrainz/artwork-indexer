@@ -1,0 +1,4 @@
+[flake8]
+per-file-ignores =
+	tests/test_caa.py:E131
+	tests/test_eaa.py:E131

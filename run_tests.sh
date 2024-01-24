@@ -11,4 +11,4 @@ psql -U musicbrainz -d musicbrainz_test_artwork_indexer -f sql/eaa_functions.sql
 psql -U musicbrainz -d musicbrainz_test_artwork_indexer -f sql/caa_triggers.sql
 psql -U musicbrainz -d musicbrainz_test_artwork_indexer -f sql/eaa_triggers.sql
 
-exec coverage run tests.py
+exec coverage run -m unittest discover . "test_*.py"
