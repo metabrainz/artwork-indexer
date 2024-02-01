@@ -29,6 +29,7 @@ from textwrap import dedent
 
 import aiohttp
 import asyncpg
+import sentry_sdk
 
 from handlers import EVENT_HANDLER_CLASSES
 
@@ -88,6 +89,8 @@ async def handle_event_failure(pg_conn, event, error):
             (event, failure_reason)
         VALUES ($1, $2)
     '''), event['id'], str(error))
+
+    sentry_sdk.capture_exception(error)
 
 
 async def cleanup_events(pg_pool):
@@ -307,6 +310,11 @@ def main():
 
     config.read(args.config)
     signal.signal(signal.SIGHUP, reload_configuration)
+
+    if 'sentry' in config:
+        sentry_dsn = config['sentry'].get('dsn')
+        if sentry_dsn:
+            sentry_sdk.init(dsn=sentry_dsn)
 
     loop = None
     try:
