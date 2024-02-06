@@ -6,7 +6,7 @@ BEGIN;
 
 SET LOCAL search_path = cover_art_archive;
 
-CREATE OR REPLACE FUNCTION a_ins_cover_art() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION artwork_indexer_a_ins_cover_art() RETURNS trigger AS $$
 DECLARE
     release_gid UUID;
 BEGIN
@@ -21,7 +21,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION a_upd_cover_art() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION artwork_indexer_a_upd_cover_art() RETURNS trigger AS $$
 DECLARE
     suffix TEXT;
     old_release_gid UUID;
@@ -68,7 +68,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION a_del_cover_art()
+CREATE OR REPLACE FUNCTION artwork_indexer_a_del_cover_art()
 RETURNS trigger AS $$
 DECLARE
     suffix TEXT;
@@ -88,7 +88,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION a_ins_cover_art_type() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION artwork_indexer_a_ins_cover_art_type() RETURNS trigger AS $$
 DECLARE
     release_gid UUID;
 BEGIN
@@ -104,7 +104,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION a_del_cover_art_type() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION artwork_indexer_a_del_cover_art_type() RETURNS trigger AS $$
 DECLARE
     release_gid UUID;
 BEGIN
@@ -124,7 +124,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION a_del_release() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION artwork_indexer_a_del_release() RETURNS trigger AS $$
 BEGIN
     INSERT INTO artwork_indexer.event_queue (entity_type, action, message)
     VALUES ('release', 'deindex', jsonb_build_object('gid', OLD.gid))
@@ -142,7 +142,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION a_upd_artist() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION artwork_indexer_a_upd_artist() RETURNS trigger AS $$
 BEGIN
     IF (OLD.name != NEW.name OR OLD.sort_name != NEW.sort_name) THEN
         INSERT INTO artwork_indexer.event_queue (entity_type, action, message) (
@@ -162,7 +162,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION a_upd_release() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION artwork_indexer_a_upd_release() RETURNS trigger AS $$
 BEGIN
     IF (OLD.name != NEW.name OR OLD.artist_credit != NEW.artist_credit OR OLD.language IS DISTINCT FROM NEW.language OR OLD.barcode IS DISTINCT FROM NEW.barcode) THEN
         INSERT INTO artwork_indexer.event_queue (entity_type, action, message) (
@@ -181,7 +181,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION a_upd_release_meta() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION artwork_indexer_a_upd_release_meta() RETURNS trigger AS $$
 BEGIN
     IF (OLD.amazon_asin IS DISTINCT FROM NEW.amazon_asin) THEN
         INSERT INTO artwork_indexer.event_queue (entity_type, action, message) (
@@ -200,7 +200,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION a_ins_release_first_release_date() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION artwork_indexer_a_ins_release_first_release_date() RETURNS trigger AS $$
 BEGIN
     INSERT INTO artwork_indexer.event_queue (entity_type, action, message) (
         SELECT 'release', 'index', jsonb_build_object('gid', musicbrainz.release.gid)
@@ -217,7 +217,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION a_del_release_first_release_date() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION artwork_indexer_a_del_release_first_release_date() RETURNS trigger AS $$
 BEGIN
     INSERT INTO artwork_indexer.event_queue (entity_type, action, message) (
         SELECT 'release', 'index', jsonb_build_object('gid', musicbrainz.release.gid)

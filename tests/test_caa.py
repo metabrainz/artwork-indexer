@@ -309,7 +309,7 @@ class TestCoverArtArchive(TestArtArchive):
         )
 
     async def test_updating_cover_art(self):
-        # a_upd_cover_art_caa
+        # artwork_indexer_a_upd_cover_art
 
         await self.pg_conn.execute(dedent('''
             UPDATE cover_art_archive.cover_art
@@ -325,7 +325,7 @@ class TestCoverArtArchive(TestArtArchive):
         )
 
     async def test_deleting_cover_art(self):
-        # a_del_cover_art_caa
+        # artwork_indexer_a_del_cover_art
 
         await self.pg_conn.execute(dedent('''
             DELETE FROM cover_art_archive.cover_art
@@ -386,10 +386,11 @@ class TestCoverArtArchive(TestArtArchive):
         ])
 
     async def test_deleting_release(self):
-        # a_del_release_caa
+        # artwork_indexer_a_del_release
 
-        # Queue an index event (via a_upd_cover_art_caa). We're checking that
-        # it's replaced by the following release deletion event.
+        # Queue an index event (via artwork_indexer_a_upd_cover_art).
+        # We're checking that it's replaced by the following release
+        # deletion event.
         await self.pg_conn.execute(dedent('''
             UPDATE cover_art_archive.cover_art
                 SET ordering = 3, comment = ''
@@ -599,7 +600,7 @@ class TestCoverArtArchive(TestArtArchive):
         ])
 
     async def test_inserting_cover_art_type(self):
-        # a_ins_cover_art_type_caa
+        # artwork_indexer_a_ins_cover_art_type
 
         await self.pg_conn.execute(dedent('''
             INSERT INTO cover_art_archive.cover_art_type (id, type_id)
@@ -618,7 +619,7 @@ class TestCoverArtArchive(TestArtArchive):
         )
 
     async def test_deleting_cover_art_type(self):
-        # a_del_cover_art_type_caa
+        # artwork_indexer_a_del_cover_art_type
 
         await self.pg_conn.execute(dedent('''
             DELETE FROM cover_art_archive.cover_art_type
@@ -635,7 +636,7 @@ class TestCoverArtArchive(TestArtArchive):
         )
 
     async def test_updating_artist(self):
-        # a_upd_artist_caa
+        # artwork_indexer_a_upd_artist
 
         await self.pg_conn.execute(dedent('''
             UPDATE artist SET name = 'foo', sort_name = 'bar' WHERE id = 1;
@@ -651,7 +652,7 @@ class TestCoverArtArchive(TestArtArchive):
         )
 
     async def test_updating_release(self):
-        # a_upd_release_caa
+        # artwork_indexer_a_upd_release
 
         await self.pg_conn.execute(dedent('''
             UPDATE release SET name = 'updated name1' WHERE id = 1;
@@ -670,7 +671,7 @@ class TestCoverArtArchive(TestArtArchive):
         )
 
     async def test_updating_release_meta(self):
-        # a_upd_release_meta_caa
+        # artwork_indexer_a_upd_release_meta
 
         await self.pg_conn.execute(dedent('''
             UPDATE release_meta SET amazon_asin = 'FOOBAR123' WHERE id = 1;
@@ -689,7 +690,7 @@ class TestCoverArtArchive(TestArtArchive):
         )
 
     async def test_inserting_first_release_date(self):
-        # a_ins_release_first_release_date_caa
+        # artwork_indexer_a_ins_release_first_release_date
 
         await self.pg_conn.execute(dedent('''
             INSERT INTO release_unknown_country VALUES (1, 1980, 1, 1);
@@ -719,7 +720,7 @@ class TestCoverArtArchive(TestArtArchive):
         )
 
     async def test_deleting_first_release_date(self):
-        # a_del_release_first_release_date_caa
+        # artwork_indexer_a_del_release_first_release_date
 
         await self.pg_conn.execute(dedent('''
             DELETE FROM release_country WHERE release = 1;

@@ -184,7 +184,7 @@ class TestEventArtArchive(TestArtArchive):
         )
 
     async def test_inserting_event_art(self):
-        # a_ins_event_art_eaa
+        # artwork_indexer_a_ins_event_art
 
         await self.pg_conn.execute(dedent('''
             INSERT INTO musicbrainz.edit
@@ -217,7 +217,7 @@ class TestEventArtArchive(TestArtArchive):
         )
 
     async def test_updating_event_art(self):
-        # a_upd_event_art_eaa
+        # artwork_indexer_a_upd_event_art
 
         await self.pg_conn.execute(dedent('''
             UPDATE event_art_archive.event_art
@@ -233,7 +233,7 @@ class TestEventArtArchive(TestArtArchive):
         )
 
     async def test_deleting_event_art(self):
-        # a_del_event_art_caa
+        # artwork_indexer_a_del_event_art
 
         await self.pg_conn.execute(dedent('''
             DELETE FROM event_art_archive.event_art
@@ -281,10 +281,11 @@ class TestEventArtArchive(TestArtArchive):
         ])
 
     async def test_deleting_event(self):
-        # a_del_event_eaa
+        # artwork_indexer_a_del_event
 
-        # Queue an index event (via a_upd_event_art_eaa). We're checking that
-        # it's replaced by the following event (entity) deletion event.
+        # Queue an index event (via artwork_indexer_a_upd_event_art).
+        # We're checking that it's replaced by the following event
+        # (entity) deletion event.
         await self.pg_conn.execute(dedent('''
             UPDATE event_art_archive.event_art
                 SET ordering = 3, comment = ''
@@ -451,7 +452,7 @@ class TestEventArtArchive(TestArtArchive):
         ])
 
     async def test_inserting_event_art_type(self):
-        # a_ins_event_art_type_eaa
+        # artwork_indexer_a_ins_event_art_type
 
         await self.pg_conn.execute(dedent('''
             INSERT INTO event_art_archive.event_art_type (id, type_id)
@@ -471,7 +472,7 @@ class TestEventArtArchive(TestArtArchive):
         )
 
     async def test_deleting_event_art_type(self):
-        # a_del_event_art_type_eaa
+        # artwork_indexer_a_del_event_art_type
 
         await self.pg_conn.execute(dedent('''
             DELETE FROM event_art_archive.event_art_type
