@@ -127,6 +127,8 @@ class EventHandler:
                 'x-archive-auto-make-bucket': '1',
                 'x-archive-keep-old-version': '1',
                 'x-archive-meta-collection': self.ia_collection,
+                'x-archive-meta-mediatype': 'image',
+                'x-archive-meta-noindex': 'true',
             },
         )
 
@@ -148,6 +150,8 @@ class EventHandler:
                     'content-type': 'application/xml; charset=UTF-8',
                     'x-archive-auto-make-bucket': '1',
                     'x-archive-meta-collection': self.ia_collection,
+                    'x-archive-meta-mediatype': 'image',
+                    'x-archive-meta-noindex': 'true',
                 },
             )
 

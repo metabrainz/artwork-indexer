@@ -60,6 +60,8 @@ def index_json_put(project, mbid, images):
             'x-archive-auto-make-bucket': '1',
             'x-archive-keep-old-version': '1',
             'x-archive-meta-collection': project['ia_collection'],
+            'x-archive-meta-mediatype': 'image',
+            'x-archive-meta-noindex': 'true',
         },
         'data': json.dumps({
             'images': [
@@ -101,6 +103,8 @@ def mb_metadata_xml_put(project, mbid, xml):
             'content-type': 'application/xml; charset=UTF-8',
             'x-archive-auto-make-bucket': '1',
             'x-archive-meta-collection': project['ia_collection'],
+            'x-archive-meta-mediatype': 'image',
+            'x-archive-meta-noindex': 'true',
         },
         'data': xml,
     }
