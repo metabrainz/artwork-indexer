@@ -15,7 +15,8 @@ CREATE TYPE event_queue_action AS ENUM (
     'index',
     'copy_image',
     'delete_image',
-    'deindex'
+    'deindex',
+    'noop'
 );
 
 CREATE TYPE event_state AS ENUM (

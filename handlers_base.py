@@ -224,6 +224,10 @@ class EventHandler:
             },
         )
 
+    async def noop(self, pg_conn, message):
+        if message.get('fail'):
+            raise Exception('Failure (no-op)')
+
 
 class MusicBrainzEventHandler(EventHandler):
 
