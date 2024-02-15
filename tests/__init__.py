@@ -1,9 +1,9 @@
-import asyncpg
 import configparser
+import io
 import json
+import psycopg
+import requests
 import unittest
-from aiohttp import ClientSession
-from contextlib import asynccontextmanager
 from urllib.parse import urlparse
 from textwrap import dedent
 
@@ -78,7 +78,7 @@ def index_json_put(project, mbid, images):
                 } for image in images
             ],
             f'{entity_type}': f'https://musicbrainz.org/{entity_type}/{mbid}',
-        }, sort_keys=True)
+        }, sort_keys=True).encode('utf-8')
     }
 
 
@@ -106,7 +106,7 @@ def mb_metadata_xml_put(project, mbid, xml):
             'x-archive-meta-mediatype': 'image',
             'x-archive-meta-noindex': 'true',
         },
-        'data': xml,
+        'data': xml.encode('utf-8'),
     }
 
 
@@ -114,28 +114,18 @@ def record_items(rec):
     # ignore datetime columns
     for (key, value) in rec.items():
         if key not in ('created', 'last_updated'):
-            if key == 'message':
-                value = json.loads(value)
             yield (key, value)
 
 
 class MockResponse():
 
     def __init__(self, status=200, text=''):
-        self._status = status
-        self._text = text
+        self.status = status
+        self.raw = io.StringIO(text)
 
-    def __await__(self):
-        yield
-
-    async def __aenter__(self):
-        return self
-
-    async def __exit__(self):
-        return self
-
-    async def text(self):
-        return self._text
+    def raise_for_status(self):
+        if self.status != 200:
+            raise Exception('Error: HTTP ' + str(self.status))
 
 
 class MockClientSession():
@@ -143,23 +133,17 @@ class MockClientSession():
     def __init__(self):
         self.last_requests = []
         self.next_responses = []
-        self.session = ClientSession(raise_for_status=True)
-
-    async def __aenter__(self, *args):
-        return self
-
-    async def __aexit__(self, *args):
-        return self
+        self.session = requests.Session()
 
     def _get_next_response(self):
         if self.next_responses:
             resp = self.next_responses.pop(0)
-            if resp._status != 200:
-                raise Exception('HTTP %d' % resp._status)
+            if resp.status != 200:
+                raise Exception('HTTP %d' % resp.status)
             return resp
         return MockResponse()
 
-    def get(self, url, headers=None):
+    def get(self, url, headers=None, **kwargs):
         self.last_requests.append({
             'method': 'GET',
             'url': url,
@@ -176,7 +160,7 @@ class MockClientSession():
             'method': 'PUT',
             'url': url,
             'headers': headers,
-            'data': data.decode('utf-8') if data else None,
+            'data': data,
         })
         return self._get_next_response()
 
@@ -189,38 +173,33 @@ class MockClientSession():
         })
         return self._get_next_response()
 
-    async def close(self):
-        await self.session.close()
+    def close(self):
+        self.session.close()
 
 
-class TestArtArchive(unittest.IsolatedAsyncioTestCase):
+class TestArtArchive(unittest.TestCase):
 
-    async def asyncSetUp(self):
+    def setUp(self):
         self.last_requests = []
         self.next_responses = []
 
-        self.pg_conn = await asyncpg.connect(**tests_config['database'])
+        self.pg_conn = psycopg.connect(
+            psycopg.conninfo.make_conninfo(**tests_config['database']),
+            autocommit=True,
+            row_factory=psycopg.rows.dict_row,
+        )
+
         self.session = MockClientSession()
+        self.http_client_cls = lambda: self.session
 
-        @asynccontextmanager
-        async def http_client_cls(*args, **kwargs):
-            try:
-                if self.session.session.closed:
-                    self.session = MockClientSession()
-                yield self.session
-            finally:
-                await self.session.close()
+    def tearDown(self):
+        self.pg_conn.close()
+        self.session.close()
 
-        self.http_client_cls = http_client_cls
-
-    async def asyncTearDown(self):
-        await self.pg_conn.close()
-        await self.session.close()
-
-    async def get_event_queue(self):
-        events = await self.pg_conn.fetch(dedent('''
+    def get_event_queue(self):
+        pg_cur = self.pg_conn.execute(dedent('''
             SELECT * FROM artwork_indexer.event_queue
             WHERE state != 'completed'
             ORDER BY id
         '''))
-        return [dict(record_items(x)) for x in events]
+        return [dict(record_items(x)) for x in pg_cur.fetchall()]

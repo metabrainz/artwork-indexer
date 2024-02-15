@@ -32,7 +32,7 @@ CREATE TYPE event_state AS ENUM (
     'queued',
     -- 'running' events have started processing and are currently
     -- being handled by the indexer process.  Events generally must
-    -- perform asynchronous database queries and HTTP requests
+    -- perform synchronous database queries and HTTP requests
     -- so may take some time to complete.
     --
     -- If a running event encounters an error, and the value of the

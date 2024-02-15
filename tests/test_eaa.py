@@ -78,10 +78,10 @@ EVENT2_XML = EVENT_XML_TEMPLATE.format(**EVENT2_XML_FMT_ARGS)
 
 class TestEventArtArchive(TestArtArchive):
 
-    async def asyncSetUp(self):
-        await super().asyncSetUp()
+    def setUp(self):
+        super().setUp()
 
-        await self.pg_conn.execute(dedent('''
+        self.pg_conn.execute(dedent('''
             INSERT INTO musicbrainz.event
                     (id, gid, name, begin_date_year, end_date_year,
                      time, type)
@@ -137,28 +137,28 @@ class TestEventArtArchive(TestArtArchive):
             'types': [],
         }
 
-    async def asyncTearDown(self):
-        await self.pg_conn.execute(dedent('''
+    def tearDown(self):
+        self.pg_conn.execute(dedent('''
             TRUNCATE musicbrainz.event CASCADE;
             TRUNCATE musicbrainz.editor CASCADE;
         '''))
-        await super().asyncTearDown()
+        super().tearDown()
 
-    async def _event_reindex_test(self,
-                                  event_mbid=None,
-                                  event_id=None,
-                                  images_json=None,
-                                  xml_fmt_args_base=None,
-                                  xml_fmt_args=None):
+    def _event_reindex_test(self,
+                            event_mbid=None,
+                            event_id=None,
+                            images_json=None,
+                            xml_fmt_args_base=None,
+                            xml_fmt_args=None):
         self.session.last_requests = []
 
-        self.assertEqual(await self.get_event_queue(), [
+        self.assertEqual(self.get_event_queue(), [
             event_index_event(event_mbid, id=event_id),
         ])
 
-        await indexer.indexer(tests_config, 1,
-                              max_idle_loops=1,
-                              http_client_cls=self.http_client_cls)
+        indexer.indexer(tests_config, 1,
+                        max_idle_loops=1,
+                        http_client_cls=self.http_client_cls)
 
         self.assertEqual(self.session.last_requests, [
             event_index_json_put(event_mbid, images_json),
@@ -171,11 +171,11 @@ class TestEventArtArchive(TestArtArchive):
             ),
         ])
 
-    async def _event1_reindex_test(self,
-                                   event_id=None,
-                                   images_json=None,
-                                   xml_fmt_args=None):
-        await self._event_reindex_test(
+    def _event1_reindex_test(self,
+                             event_id=None,
+                             images_json=None,
+                             xml_fmt_args=None):
+        self._event_reindex_test(
             event_mbid=EVENT1_MBID,
             event_id=event_id,
             images_json=images_json,
@@ -183,10 +183,10 @@ class TestEventArtArchive(TestArtArchive):
             xml_fmt_args=xml_fmt_args
         )
 
-    async def test_inserting_event_art(self):
+    def test_inserting_event_art(self):
         # artwork_indexer_a_ins_event_art
 
-        await self.pg_conn.execute(dedent('''
+        self.pg_conn.execute(dedent('''
             INSERT INTO musicbrainz.edit
                     (id, editor, type, status, expire_time)
                 VALUES (3, 10, 158, 2, now());
@@ -211,15 +211,15 @@ class TestEventArtArchive(TestArtArchive):
             'types': ['Poster'],
         }
 
-        await self._event1_reindex_test(
+        self._event1_reindex_test(
             event_id=1,
             images_json=[self._orig_image1_json, new_image3_json],
         )
 
-    async def test_updating_event_art(self):
+    def test_updating_event_art(self):
         # artwork_indexer_a_upd_event_art
 
-        await self.pg_conn.execute(dedent('''
+        self.pg_conn.execute(dedent('''
             UPDATE event_art_archive.event_art
                 SET ordering = 3, comment = ''
                 WHERE id = 1
@@ -227,22 +227,22 @@ class TestEventArtArchive(TestArtArchive):
 
         new_image1_json = self._orig_image1_json | {'comment': ''}
 
-        await self._event1_reindex_test(
+        self._event1_reindex_test(
             event_id=1,
             images_json=[new_image1_json],
         )
 
-    async def test_deleting_event_art(self):
+    def test_deleting_event_art(self):
         # artwork_indexer_a_del_event_art
 
-        await self.pg_conn.execute(dedent('''
+        self.pg_conn.execute(dedent('''
             DELETE FROM event_art_archive.event_art
                 WHERE id = 1
         '''))
 
         self.session.last_requests = []
 
-        self.assertEqual(await self.get_event_queue(), [
+        self.assertEqual(self.get_event_queue(), [
             {
                 'id': 1,
                 'state': 'queued',
@@ -259,9 +259,9 @@ class TestEventArtArchive(TestArtArchive):
             event_index_event(EVENT1_MBID, id=2, depends_on=[1]),
         ])
 
-        await indexer.indexer(tests_config, 1,
-                              max_idle_loops=1,
-                              http_client_cls=self.http_client_cls)
+        indexer.indexer(tests_config, 1,
+                        max_idle_loops=1,
+                        http_client_cls=self.http_client_cls)
 
         self.assertEqual(self.session.last_requests, [
             {
@@ -280,13 +280,13 @@ class TestEventArtArchive(TestArtArchive):
             event_mb_metadata_xml_put(EVENT1_MBID, EVENT1_XML),
         ])
 
-    async def test_deleting_event(self):
+    def test_deleting_event(self):
         # artwork_indexer_a_del_event
 
         # Queue an index event (via artwork_indexer_a_upd_event_art).
         # We're checking that it's replaced by the following event
         # (entity) deletion event.
-        await self.pg_conn.execute(dedent('''
+        self.pg_conn.execute(dedent('''
             UPDATE event_art_archive.event_art
                 SET ordering = 3, comment = ''
                 WHERE id = 1
@@ -294,19 +294,19 @@ class TestEventArtArchive(TestArtArchive):
 
         new_image1_json = self._orig_image1_json | {'comment': ''}
 
-        self.assertEqual(await self.get_event_queue(), [
+        self.assertEqual(self.get_event_queue(), [
             event_index_event(EVENT1_MBID, id=1),
         ])
 
         # This simulates a merge, where the cover art is first copied to
         # another release, and the original release is deleted.
-        await self.pg_conn.execute(dedent('''
+        self.pg_conn.execute(dedent('''
             UPDATE event_art_archive.event_art SET event = 2 WHERE id = 1;
             UPDATE event_meta SET event_art_presence = 'present' WHERE id = 2;
             DELETE FROM event WHERE id = 1;
         '''))
 
-        self.assertEqual(await self.get_event_queue(), [
+        self.assertEqual(self.get_event_queue(), [
             {
                 'id': 5,
                 'state': 'queued',
@@ -351,18 +351,19 @@ class TestEventArtArchive(TestArtArchive):
         print('note, the following test is expected to log an HTTP 400 error')
         self.session.next_responses.append(MockResponse(status=400))
 
-        await self.pg_conn.execute(dedent('''
+        self.pg_conn.execute(dedent('''
             UPDATE artwork_indexer.event_queue
             SET attempts = 4, last_updated = (now() - interval '1 day')
             WHERE action = 'copy_image'
         '''))
 
         self.session.last_requests = []
-        await indexer.indexer(tests_config, 1,
-                              max_idle_loops=1,
-                              http_client_cls=self.http_client_cls)
 
-        self.assertEqual(await self.get_event_queue(), [
+        indexer.indexer(tests_config, 1,
+                        max_idle_loops=1,
+                        http_client_cls=self.http_client_cls)
+
+        self.assertEqual(self.get_event_queue(), [
             {
                 'id': 5,
                 'state': 'failed',
@@ -394,11 +395,11 @@ class TestEventArtArchive(TestArtArchive):
         ])
 
         self.assertEqual(
-            await self.pg_conn.fetchval(dedent('''
+            self.pg_conn.execute(dedent('''
                 SELECT failure_reason
                 FROM artwork_indexer.event_failure_reason
                 WHERE event = 5
-            ''')),
+            ''')).fetchone()['failure_reason'],
             'HTTP 400',
         )
 
@@ -418,7 +419,7 @@ class TestEventArtArchive(TestArtArchive):
 
         # Revert the artificial failure we created, which should unblock
         # processing of the failed event and its dependants.
-        await self.pg_conn.execute(dedent('''
+        self.pg_conn.execute(dedent('''
             UPDATE artwork_indexer.event_queue
             SET attempts = 0, state = 'queued'
             WHERE action = 'copy_image'
@@ -426,9 +427,9 @@ class TestEventArtArchive(TestArtArchive):
 
         self.session.last_requests = []
 
-        await indexer.indexer(tests_config, 1,
-                              max_idle_loops=1,
-                              http_client_cls=self.http_client_cls)
+        indexer.indexer(tests_config, 1,
+                        max_idle_loops=1,
+                        http_client_cls=self.http_client_cls)
 
         self.assertEqual(self.session.last_requests, [
             event_image_copy_put(EVENT1_MBID, EVENT2_MBID, 1),
@@ -451,10 +452,10 @@ class TestEventArtArchive(TestArtArchive):
             event_mb_metadata_xml_put(EVENT2_MBID, EVENT2_XML),
         ])
 
-    async def test_inserting_event_art_type(self):
+    def test_inserting_event_art_type(self):
         # artwork_indexer_a_ins_event_art_type
 
-        await self.pg_conn.execute(dedent('''
+        self.pg_conn.execute(dedent('''
             INSERT INTO event_art_archive.event_art_type (id, type_id)
                 VALUES (2, 1);
         '''))
@@ -464,17 +465,17 @@ class TestEventArtArchive(TestArtArchive):
             {'front': True, 'types': ['Poster']}
         )
 
-        await self._event_reindex_test(
+        self._event_reindex_test(
             event_mbid=EVENT2_MBID,
             event_id=1,
             images_json=[new_image2_json],
             xml_fmt_args_base=EVENT2_XML_FMT_ARGS,
         )
 
-    async def test_deleting_event_art_type(self):
+    def test_deleting_event_art_type(self):
         # artwork_indexer_a_del_event_art_type
 
-        await self.pg_conn.execute(dedent('''
+        self.pg_conn.execute(dedent('''
             DELETE FROM event_art_archive.event_art_type
                 WHERE id = 1 AND type_id = 1
         '''))
@@ -482,7 +483,7 @@ class TestEventArtArchive(TestArtArchive):
         new_image1_json = self._orig_image1_json | \
             {'front': False, 'types': []}
 
-        await self._event1_reindex_test(
+        self._event1_reindex_test(
             event_id=1,
             images_json=[new_image1_json],
         )

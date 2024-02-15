@@ -125,10 +125,10 @@ def release_image_copy_put(source_mbid, target_mbid, image_id):
 
 class TestCoverArtArchive(TestArtArchive):
 
-    async def asyncSetUp(self):
-        await super().asyncSetUp()
+    def setUp(self):
+        super().setUp()
 
-        await self.pg_conn.execute(dedent('''
+        self.pg_conn.execute(dedent('''
             INSERT INTO area
                     (id, gid, name, type, edits_pending, last_updated,
                      begin_date_year, begin_date_month, begin_date_day,
@@ -217,30 +217,30 @@ class TestCoverArtArchive(TestArtArchive):
             'types': ['Front'],
         }
 
-    async def asyncTearDown(self):
-        await self.pg_conn.execute(dedent('''
+    def tearDown(self):
+        self.pg_conn.execute(dedent('''
             TRUNCATE musicbrainz.area CASCADE;
             TRUNCATE musicbrainz.artist CASCADE;
             TRUNCATE musicbrainz.artist_credit CASCADE;
             TRUNCATE musicbrainz.editor CASCADE;
         '''))
-        await super().asyncTearDown()
+        super().tearDown()
 
-    async def _release_reindex_test(self,
-                                    release_mbid=None,
-                                    event_id=None,
-                                    images_json=None,
-                                    xml_fmt_args_base=None,
-                                    xml_fmt_args=None):
+    def _release_reindex_test(self,
+                              release_mbid=None,
+                              event_id=None,
+                              images_json=None,
+                              xml_fmt_args_base=None,
+                              xml_fmt_args=None):
         self.session.last_requests = []
 
-        self.assertEqual(await self.get_event_queue(), [
+        self.assertEqual(self.get_event_queue(), [
             release_index_event(release_mbid, id=event_id),
         ])
 
-        await indexer.indexer(tests_config, 1,
-                              max_idle_loops=1,
-                              http_client_cls=self.http_client_cls)
+        indexer.indexer(tests_config, 1,
+                        max_idle_loops=1,
+                        http_client_cls=self.http_client_cls)
 
         self.assertEqual(self.session.last_requests, [
             release_index_json_put(release_mbid, images_json),
@@ -253,11 +253,11 @@ class TestCoverArtArchive(TestArtArchive):
             ),
         ])
 
-    async def _release1_reindex_test(self,
-                                     event_id=None,
-                                     images_json=None,
-                                     xml_fmt_args=None):
-        await self._release_reindex_test(
+    def _release1_reindex_test(self,
+                               event_id=None,
+                               images_json=None,
+                               xml_fmt_args=None):
+        self._release_reindex_test(
             release_mbid=RELEASE1_MBID,
             event_id=event_id,
             images_json=images_json,
@@ -265,11 +265,11 @@ class TestCoverArtArchive(TestArtArchive):
             xml_fmt_args=xml_fmt_args
         )
 
-    async def _release2_reindex_test(self,
-                                     event_id=None,
-                                     images_json=None,
-                                     xml_fmt_args=None):
-        await self._release_reindex_test(
+    def _release2_reindex_test(self,
+                               event_id=None,
+                               images_json=None,
+                               xml_fmt_args=None):
+        self._release_reindex_test(
             release_mbid=RELEASE2_MBID,
             event_id=event_id,
             images_json=images_json,
@@ -277,8 +277,8 @@ class TestCoverArtArchive(TestArtArchive):
             xml_fmt_args=xml_fmt_args
         )
 
-    async def test_inserting_cover_art(self):
-        await self.pg_conn.execute(dedent('''
+    def test_inserting_cover_art(self):
+        self.pg_conn.execute(dedent('''
             INSERT INTO musicbrainz.edit
                     (id, editor, type, status, expire_time)
                 VALUES (3, 10, 314, 2, now());
@@ -291,7 +291,7 @@ class TestCoverArtArchive(TestArtArchive):
                 VALUES (3, 1, 'image/jpeg', 3, 2, 'page 1');
         '''))
 
-        await self._release1_reindex_test(
+        self._release1_reindex_test(
             event_id=1,
             images_json=[
                 self._orig_image1_json,
@@ -308,10 +308,10 @@ class TestCoverArtArchive(TestArtArchive):
             xml_fmt_args={'caa_count': 2},
         )
 
-    async def test_updating_cover_art(self):
+    def test_updating_cover_art(self):
         # artwork_indexer_a_upd_cover_art
 
-        await self.pg_conn.execute(dedent('''
+        self.pg_conn.execute(dedent('''
             UPDATE cover_art_archive.cover_art
                 SET ordering = 3, comment = ''
                 WHERE id = 1
@@ -319,22 +319,22 @@ class TestCoverArtArchive(TestArtArchive):
 
         new_image1_json = self._orig_image1_json | {'comment': ''}
 
-        await self._release1_reindex_test(
+        self._release1_reindex_test(
             event_id=1,
             images_json=[new_image1_json],
         )
 
-    async def test_deleting_cover_art(self):
+    def test_deleting_cover_art(self):
         # artwork_indexer_a_del_cover_art
 
-        await self.pg_conn.execute(dedent('''
+        self.pg_conn.execute(dedent('''
             DELETE FROM cover_art_archive.cover_art
                 WHERE id = 1
         '''))
 
         self.session.last_requests = []
 
-        self.assertEqual(await self.get_event_queue(), [
+        self.assertEqual(self.get_event_queue(), [
             {
                 'id': 1,
                 'state': 'queued',
@@ -351,9 +351,9 @@ class TestCoverArtArchive(TestArtArchive):
             release_index_event(RELEASE1_MBID, id=2, depends_on=[1]),
         ])
 
-        await indexer.indexer(tests_config, 1,
-                              max_idle_loops=1,
-                              http_client_cls=self.http_client_cls)
+        indexer.indexer(tests_config, 1,
+                        max_idle_loops=1,
+                        http_client_cls=self.http_client_cls)
 
         self.assertEqual(self.session.last_requests, [
             {
@@ -385,13 +385,13 @@ class TestCoverArtArchive(TestArtArchive):
             ),
         ])
 
-    async def test_deleting_release(self):
+    def test_deleting_release(self):
         # artwork_indexer_a_del_release
 
         # Queue an index event (via artwork_indexer_a_upd_cover_art).
         # We're checking that it's replaced by the following release
         # deletion event.
-        await self.pg_conn.execute(dedent('''
+        self.pg_conn.execute(dedent('''
             UPDATE cover_art_archive.cover_art
                 SET ordering = 3, comment = ''
                 WHERE id = 1
@@ -399,13 +399,13 @@ class TestCoverArtArchive(TestArtArchive):
 
         new_image1_json = self._orig_image1_json | {'comment': ''}
 
-        self.assertEqual(await self.get_event_queue(), [
+        self.assertEqual(self.get_event_queue(), [
             release_index_event(RELEASE1_MBID, id=1),
         ])
 
         # This simulates a merge, where the cover art is first copied to
         # another release, and the original release is deleted.
-        await self.pg_conn.execute(dedent('''
+        self.pg_conn.execute(dedent('''
             UPDATE cover_art_archive.cover_art
                 SET release = 2
                 WHERE id = 1;
@@ -436,7 +436,7 @@ class TestCoverArtArchive(TestArtArchive):
             DELETE FROM release WHERE id = 1;
         '''))
 
-        self.assertEqual(await self.get_event_queue(), [
+        self.assertEqual(self.get_event_queue(), [
             {
                 'id': 5,
                 'state': 'queued',
@@ -481,18 +481,18 @@ class TestCoverArtArchive(TestArtArchive):
         print('note, the following test is expected to log an HTTP 400 error')
         self.session.next_responses.append(MockResponse(status=400))
 
-        await self.pg_conn.execute(dedent('''
+        self.pg_conn.execute(dedent('''
             UPDATE artwork_indexer.event_queue
             SET attempts = 4, last_updated = (now() - interval '1 day')
             WHERE action = 'copy_image'
         '''))
 
         self.session.last_requests = []
-        await indexer.indexer(tests_config, 1,
-                              max_idle_loops=1,
-                              http_client_cls=self.http_client_cls)
+        indexer.indexer(tests_config, 1,
+                        max_idle_loops=1,
+                        http_client_cls=self.http_client_cls)
 
-        self.assertEqual(await self.get_event_queue(), [
+        self.assertEqual(self.get_event_queue(), [
             {
                 'id': 5,
                 'state': 'failed',
@@ -524,11 +524,11 @@ class TestCoverArtArchive(TestArtArchive):
         ])
 
         self.assertEqual(
-            await self.pg_conn.fetchval(dedent('''
+            self.pg_conn.execute(dedent('''
                 SELECT failure_reason
                 FROM artwork_indexer.event_failure_reason
                 WHERE event = 5
-            ''')),
+            ''')).fetchone()['failure_reason'],
             'HTTP 400',
         )
 
@@ -549,7 +549,7 @@ class TestCoverArtArchive(TestArtArchive):
 
         # Revert the artificial failure we created, which should unblock
         # processing of the failed event and its dependants.
-        await self.pg_conn.execute(dedent('''
+        self.pg_conn.execute(dedent('''
             UPDATE artwork_indexer.event_queue
             SET attempts = 0, state = 'queued'
             WHERE action = 'copy_image'
@@ -557,9 +557,9 @@ class TestCoverArtArchive(TestArtArchive):
 
         self.session.last_requests = []
 
-        await indexer.indexer(tests_config, 1,
-                              max_idle_loops=1,
-                              http_client_cls=self.http_client_cls)
+        indexer.indexer(tests_config, 1,
+                        max_idle_loops=1,
+                        http_client_cls=self.http_client_cls)
 
         self.assertEqual(self.session.last_requests, [
             release_image_copy_put(RELEASE1_MBID, RELEASE2_MBID, 1),
@@ -599,10 +599,10 @@ class TestCoverArtArchive(TestArtArchive):
             ),
         ])
 
-    async def test_inserting_cover_art_type(self):
+    def test_inserting_cover_art_type(self):
         # artwork_indexer_a_ins_cover_art_type
 
-        await self.pg_conn.execute(dedent('''
+        self.pg_conn.execute(dedent('''
             INSERT INTO cover_art_archive.cover_art_type (id, type_id)
                 VALUES (1, 2);
         '''))
@@ -612,16 +612,16 @@ class TestCoverArtArchive(TestArtArchive):
             {'back': True, 'types': ['Front', 'Back']}
         )
 
-        await self._release1_reindex_test(
+        self._release1_reindex_test(
             event_id=1,
             images_json=[new_image1_json],
             xml_fmt_args={'is_back': 'true'},
         )
 
-    async def test_deleting_cover_art_type(self):
+    def test_deleting_cover_art_type(self):
         # artwork_indexer_a_del_cover_art_type
 
-        await self.pg_conn.execute(dedent('''
+        self.pg_conn.execute(dedent('''
             DELETE FROM cover_art_archive.cover_art_type
                 WHERE id = 1 AND type_id = 1
         '''))
@@ -629,20 +629,20 @@ class TestCoverArtArchive(TestArtArchive):
         new_image1_json = self._orig_image1_json | \
             {'front': False, 'types': []}
 
-        await self._release1_reindex_test(
+        self._release1_reindex_test(
             event_id=1,
             images_json=[new_image1_json],
             xml_fmt_args={'is_front': 'false'},
         )
 
-    async def test_updating_artist(self):
+    def test_updating_artist(self):
         # artwork_indexer_a_upd_artist
 
-        await self.pg_conn.execute(dedent('''
+        self.pg_conn.execute(dedent('''
             UPDATE artist SET name = 'foo', sort_name = 'bar' WHERE id = 1;
         '''))
 
-        await self._release1_reindex_test(
+        self._release1_reindex_test(
             event_id=1,
             images_json=[self._orig_image1_json],
             xml_fmt_args={
@@ -651,10 +651,10 @@ class TestCoverArtArchive(TestArtArchive):
             },
         )
 
-    async def test_updating_release(self):
+    def test_updating_release(self):
         # artwork_indexer_a_upd_release
 
-        await self.pg_conn.execute(dedent('''
+        self.pg_conn.execute(dedent('''
             UPDATE release SET name = 'updated name1' WHERE id = 1;
 
             -- Should not produce any update, as there is no cover art
@@ -662,7 +662,7 @@ class TestCoverArtArchive(TestArtArchive):
             UPDATE release SET name = 'updated name2' WHERE id = 2;
         '''))
 
-        await self._release1_reindex_test(
+        self._release1_reindex_test(
             event_id=1,
             images_json=[self._orig_image1_json],
             xml_fmt_args={
@@ -670,10 +670,10 @@ class TestCoverArtArchive(TestArtArchive):
             },
         )
 
-    async def test_updating_release_meta(self):
+    def test_updating_release_meta(self):
         # artwork_indexer_a_upd_release_meta
 
-        await self.pg_conn.execute(dedent('''
+        self.pg_conn.execute(dedent('''
             UPDATE release_meta SET amazon_asin = 'FOOBAR123' WHERE id = 1;
 
             -- Should not produce any update, as there is no cover art
@@ -681,7 +681,7 @@ class TestCoverArtArchive(TestArtArchive):
             UPDATE release_meta SET amazon_asin = 'FOOBAR456' WHERE id = 2;
         '''))
 
-        await self._release1_reindex_test(
+        self._release1_reindex_test(
             event_id=1,
             images_json=[self._orig_image1_json],
             xml_fmt_args={
@@ -689,10 +689,10 @@ class TestCoverArtArchive(TestArtArchive):
             },
         )
 
-    async def test_inserting_first_release_date(self):
+    def test_inserting_first_release_date(self):
         # artwork_indexer_a_ins_release_first_release_date
 
-        await self.pg_conn.execute(dedent('''
+        self.pg_conn.execute(dedent('''
             INSERT INTO release_unknown_country VALUES (1, 1980, 1, 1);
 
             -- Should not produce any update, as there is no cover art
@@ -700,7 +700,7 @@ class TestCoverArtArchive(TestArtArchive):
             INSERT INTO release_unknown_country VALUES (2, 1970, 1, 1);
         '''))
 
-        await self._release1_reindex_test(
+        self._release1_reindex_test(
             event_id=1,
             images_json=[self._orig_image1_json],
             xml_fmt_args={
@@ -719,10 +719,10 @@ class TestCoverArtArchive(TestArtArchive):
             },
         )
 
-    async def test_deleting_first_release_date(self):
+    def test_deleting_first_release_date(self):
         # artwork_indexer_a_del_release_first_release_date
 
-        await self.pg_conn.execute(dedent('''
+        self.pg_conn.execute(dedent('''
             DELETE FROM release_country WHERE release = 1;
 
             -- Should not produce any update, as there is no cover art
@@ -730,7 +730,7 @@ class TestCoverArtArchive(TestArtArchive):
             DELETE FROM release_country WHERE release = 2;
         '''))
 
-        await self._release1_reindex_test(
+        self._release1_reindex_test(
             event_id=1,
             images_json=[self._orig_image1_json],
             xml_fmt_args={
@@ -738,44 +738,44 @@ class TestCoverArtArchive(TestArtArchive):
             },
         )
 
-    async def test_duplicate_updates(self):
-        await self.pg_conn.execute(dedent('''
+    def test_duplicate_updates(self):
+        self.pg_conn.execute(dedent('''
             UPDATE musicbrainz.release SET name = 'update' WHERE id = 1;
             UPDATE cover_art_archive.cover_art SET comment = 'a' WHERE id = 1;
             UPDATE cover_art_archive.cover_art SET comment = 'b' WHERE id = 1;
         '''))
 
         # Test that duplicate index events are not inserted.
-        self.assertEqual(await self.get_event_queue(), [
+        self.assertEqual(self.get_event_queue(), [
             release_index_event(RELEASE1_MBID, id=1),
         ])
 
-    async def test_cleanup(self):
-        await self.pg_conn.execute(dedent('''
+    def test_cleanup(self):
+        self.pg_conn.execute(dedent('''
             UPDATE release SET name = 'updated name1' WHERE id = 1;
         '''))
 
-        await indexer.indexer(tests_config, 1,
-                              max_idle_loops=1,
-                              http_client_cls=self.http_client_cls)
+        indexer.indexer(tests_config, 1,
+                        max_idle_loops=1,
+                        http_client_cls=self.http_client_cls)
 
-        event_count = await self.pg_conn.fetchval(dedent('''
-            SELECT count(*) FROM artwork_indexer.event_queue
-        '''))
+        event_count = self.pg_conn.execute(dedent('''
+            SELECT count(*) as count FROM artwork_indexer.event_queue
+        ''')).fetchone()['count']
         self.assertEqual(event_count, 1)
 
-        await self.pg_conn.execute(dedent('''
+        self.pg_conn.execute(dedent('''
             UPDATE artwork_indexer.event_queue
             SET created = (created - interval '90 days');
         '''))
 
-        await indexer.indexer(tests_config, 2,
-                              max_idle_loops=2,
-                              http_client_cls=self.http_client_cls)
+        indexer.indexer(tests_config, 2,
+                        max_idle_loops=2,
+                        http_client_cls=self.http_client_cls)
 
-        event_count = await self.pg_conn.fetchval(dedent('''
-            SELECT count(*) FROM artwork_indexer.event_queue
-        '''))
+        event_count = self.pg_conn.execute(dedent('''
+            SELECT count(*) as count FROM artwork_indexer.event_queue
+        ''')).fetchone()['count']
         self.assertEqual(event_count, 0)
 
 

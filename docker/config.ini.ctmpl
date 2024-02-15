@@ -11,7 +11,7 @@ port={{ .Port }}
 {{- end }}
 {{- end }}
 user={{ keyOrDefault (print $key_prefix "postgres_user") "musicbrainz" }}
-database={{ keyOrDefault (print $key_prefix "postgres_database") "musicbrainz_db" }}
+dbname={{ keyOrDefault (print $key_prefix "postgres_database") "musicbrainz_db" }}
 
 [s3]
 url={{ keyOrDefault (print $key_prefix "s3_url") "https://{bucket}.s3.us.archive.org/{file}" }}
