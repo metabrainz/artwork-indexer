@@ -18,7 +18,6 @@
 
 import argparse
 import configparser
-import json
 import logging
 import signal
 import time
@@ -218,42 +217,6 @@ def indexer(
             raise Exception('Event is not queued: %r', event)
 
         logging.info('Processing event %s', event)
-
-        if event['action'] == 'delete_image' and \
-                event['depends_on'] is None:
-            message = event['message']
-            # If `delete_image` event exists with no parent,
-            # there should be no later `copy_image` event for
-            # the same image. Verify this to be safe.
-            later_copy_image_event = pg_conn.execute(dedent('''
-                SELECT id FROM artwork_indexer.event_queue eq
-                WHERE eq.state = 'queued'
-                AND eq.action = 'copy_image'
-                AND eq.created > %(created)s
-                AND eq.message->'artwork_id' = %(artwork_id)s
-                AND eq.message->'old_gid' = %(gid)s
-                AND eq.message->'suffix' = %(suffix)s
-                LIMIT 1
-            '''), {
-                'created': event['created'],
-                'artwork_id': json.dumps(message['artwork_id']),
-                'gid': json.dumps(message['gid']),
-                'suffix': json.dumps(message['suffix']),
-            }).fetchone()
-
-            if later_copy_image_event:
-                latest_copy_image_event_id = later_copy_image_event['id']
-                handle_event_failure(
-                    pg_conn,
-                    event,
-                    Exception(
-                        'This image cannot be deleted, because ' +
-                        'a later event exists ' +
-                        f'(id={latest_copy_image_event_id}) ' +
-                        'that wants to copy it.'
-                    )
-                )
-                continue
 
         pg_conn.execute(dedent('''
             UPDATE artwork_indexer.event_queue

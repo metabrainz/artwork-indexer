@@ -198,6 +198,35 @@ class EventHandler:
         message = event['message']
         gid = message['gid']
 
+        if event['depends_on'] is None:
+            # If a `delete_image` event exists with no parent,
+            # there should be no later `copy_image` event for
+            # the same image. Verify this to be safe.
+            later_copy_image_event = pg_conn.execute(dedent('''
+                SELECT id FROM artwork_indexer.event_queue eq
+                WHERE eq.state = 'queued'
+                AND eq.action = 'copy_image'
+                AND eq.created > %(created)s
+                AND eq.message->'artwork_id' = %(artwork_id)s
+                AND eq.message->'old_gid' = %(gid)s
+                AND eq.message->'suffix' = %(suffix)s
+                LIMIT 1
+            '''), {
+                'created': event['created'],
+                'artwork_id': json.dumps(message['artwork_id']),
+                'gid': json.dumps(gid),
+                'suffix': json.dumps(message['suffix']),
+            }).fetchone()
+
+            if later_copy_image_event:
+                latest_copy_image_event_id = later_copy_image_event['id']
+                raise Exception(
+                    'This image cannot be deleted, because ' +
+                    'a later event exists ' +
+                    f'(id={latest_copy_image_event_id}) ' +
+                    'that wants to copy it.'
+                )
+
         filename = IMAGE_FILE_FORMAT.format(
             bucket=self.build_bucket_name(gid),
             id=message['artwork_id'],
