@@ -88,6 +88,51 @@ class TestGeneral(TestArtArchive):
         # on event #1, which is not yet completed.
         self.assertEqual(next_event['id'], 1)
 
+    def test_failure(self):
+        self.pg_conn.execute(dedent('''
+            INSERT INTO artwork_indexer.event_queue
+                    (id, entity_type, action, message, created)
+                 VALUES (1, 'release', 'noop', '{"fail": true}',
+                         NOW() - interval '1 day');
+        '''))
+
+        for index in range(0, indexer.MAX_ATTEMPTS):
+            self.pg_conn.execute(dedent('''
+                UPDATE artwork_indexer.event_queue
+                   SET last_updated =
+                        (NOW() - (interval '30 minutes' * 2 * attempts))
+                 WHERE id = 1;
+            '''))
+
+            indexer.indexer(tests_config, 1,
+                            max_idle_loops=1,
+                            http_client_cls=self.http_client_cls)
+
+            pg_cur = self.pg_conn.execute(
+                'SELECT * FROM artwork_indexer.event_queue WHERE id = 1;'
+            )
+            event = pg_cur.fetchone()
+            attempts = event['attempts']
+
+            self.assertEqual(attempts, index + 1)
+
+            pg_cur = self.pg_conn.execute(dedent('''
+                SELECT count(*) AS count
+                  FROM artwork_indexer.event_failure_reason
+                 WHERE event = 1
+                   AND failure_reason = 'Failure (no-op)'
+            '''))
+            failure_reason_count = pg_cur.fetchone()['count']
+            self.assertEqual(failure_reason_count, index + 1)
+
+            if attempts < indexer.MAX_ATTEMPTS:
+                self.assertEqual(event['state'], 'queued')
+            else:
+                self.assertEqual(event['state'], 'failed')
+
+        # Should not return the failed event.
+        self.assertEqual(indexer.get_next_event(self.pg_conn), None)
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
