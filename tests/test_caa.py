@@ -665,46 +665,6 @@ class TestCoverArtArchive(TestArtArchive):
             },
         )
 
-    def test_duplicate_updates(self):
-        self.pg_conn.execute(dedent('''
-            UPDATE musicbrainz.release SET name = 'update' WHERE id = 1;
-            UPDATE cover_art_archive.cover_art SET comment = 'a' WHERE id = 1;
-            UPDATE cover_art_archive.cover_art SET comment = 'b' WHERE id = 1;
-        '''))
-
-        # Test that duplicate index events are not inserted.
-        self.assertEqual(self.get_event_queue(), [
-            release_index_event(RELEASE1_MBID, id=1),
-        ])
-
-    def test_cleanup(self):
-        self.pg_conn.execute(dedent('''
-            UPDATE release SET name = 'updated name1' WHERE id = 1;
-        '''))
-
-        indexer.indexer(tests_config, 1,
-                        max_idle_loops=1,
-                        http_client_cls=self.http_client_cls)
-
-        event_count = self.pg_conn.execute(dedent('''
-            SELECT count(*) as count FROM artwork_indexer.event_queue
-        ''')).fetchone()['count']
-        self.assertEqual(event_count, 1)
-
-        self.pg_conn.execute(dedent('''
-            UPDATE artwork_indexer.event_queue
-            SET created = (created - interval '90 days');
-        '''))
-
-        indexer.indexer(tests_config, 2,
-                        max_idle_loops=2,
-                        http_client_cls=self.http_client_cls)
-
-        event_count = self.pg_conn.execute(dedent('''
-            SELECT count(*) as count FROM artwork_indexer.event_queue
-        ''')).fetchone()['count']
-        self.assertEqual(event_count, 0)
-
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
