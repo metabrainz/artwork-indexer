@@ -118,6 +118,33 @@ def cleanup_events(pg_conn):
             ' older than 90 days')
 
 
+def get_next_event(pg_conn):
+    # Skip events that have reached `MAX_ATTEMPTS`.
+    # In other cases, `last_updated` should be within a
+    # specific time interval. We start by waiting 30
+    # minutes, and double the amount of time after each
+    # attempt.
+    return pg_conn.execute(dedent('''
+        SELECT * FROM artwork_indexer.event_queue eq
+        WHERE eq.state = 'queued'
+        AND eq.attempts < %(max_attempts)s
+        AND eq.last_updated <=
+            (now() - (interval '30 minutes' * 2 * eq.attempts))
+        AND (eq.depends_on IS NULL OR EXISTS (
+            SELECT TRUE
+            FROM artwork_indexer.event_queue parent_eq
+            WHERE array_position(
+                eq.depends_on,
+                parent_eq.id
+            ) IS NOT NULL
+            AND parent_eq.state = 'completed'
+        ))
+        ORDER BY created, id
+        LIMIT 1
+        FOR UPDATE SKIP LOCKED
+    '''), {'max_attempts': MAX_ATTEMPTS}).fetchone()
+
+
 def run_event_handler(pg_conn, event, handler):
     handler_method = getattr(handler, event['action'])
     try:
@@ -163,30 +190,7 @@ def indexer(
     while True:
         time.sleep(sleep_amount)
 
-        # Skip events that have reached `MAX_ATTEMPTS`.
-        # In other cases, `last_updated` should be within a
-        # specific time interval. We start by waiting 30
-        # minutes, and double the amount of time after each
-        # attempt.
-        event = pg_conn.execute(dedent('''
-            SELECT * FROM artwork_indexer.event_queue eq
-            WHERE eq.state = 'queued'
-            AND eq.attempts < %(max_attempts)s
-            AND eq.last_updated <=
-                (now() - (interval '30 minutes' * 2 * eq.attempts))
-            AND (eq.depends_on IS NULL OR EXISTS (
-                SELECT TRUE
-                FROM artwork_indexer.event_queue parent_eq
-                WHERE array_position(
-                    eq.depends_on,
-                    parent_eq.id
-                ) IS NOT NULL
-                AND parent_eq.state = 'completed'
-            ))
-            ORDER BY created, id
-            LIMIT 1
-            FOR UPDATE SKIP LOCKED
-        '''), {'max_attempts': MAX_ATTEMPTS}).fetchone()
+        event = get_next_event(pg_conn)
 
         # Reset `sleep_amount` if we're seeing activity, otherwise
         # increase it exponentially up to `maxwait` seconds.
