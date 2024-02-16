@@ -107,7 +107,8 @@ class EventHandler:
     def fetch_image_rows(self, pg_conn, entity_gid):
         raise NotImplementedError
 
-    def index(self, pg_conn, message):
+    def index(self, pg_conn, event):
+        message = event['message']
         gid = message['gid']
 
         encoded_index_json = json.dumps({
@@ -154,7 +155,8 @@ class EventHandler:
             },
         ).raise_for_status()
 
-    def copy_image(self, pg_conn, message):
+    def copy_image(self, pg_conn, event):
+        message = event['message']
         artwork_id = message['artwork_id']
         old_gid = message['old_gid']
         new_gid = message['new_gid']
@@ -192,7 +194,8 @@ class EventHandler:
             },
         ).raise_for_status()
 
-    def delete_image(self, pg_conn, message):
+    def delete_image(self, pg_conn, event):
+        message = event['message']
         gid = message['gid']
 
         filename = IMAGE_FILE_FORMAT.format(
@@ -211,7 +214,8 @@ class EventHandler:
             },
         ).raise_for_status()
 
-    def deindex(self, pg_conn, message):
+    def deindex(self, pg_conn, event):
+        message = event['message']
         # Note: This request should succeed (204) even if the file
         # no longer exists.
         self.http_session.delete(
@@ -223,7 +227,8 @@ class EventHandler:
             },
         ).raise_for_status()
 
-    def noop(self, pg_conn, message):
+    def noop(self, pg_conn, event):
+        message = event['message']
         if message.get('fail'):
             raise Exception('Failure (no-op)')
 

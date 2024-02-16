@@ -122,7 +122,7 @@ def cleanup_events(pg_conn):
 def run_event_handler(pg_conn, event, handler):
     handler_method = getattr(handler, event['action'])
     try:
-        handler_method(pg_conn, event['message'])
+        handler_method(pg_conn, event)
     except BaseException as task_exc:
         handle_event_failure(pg_conn, event, task_exc)
     else:
