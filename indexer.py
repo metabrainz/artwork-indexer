@@ -130,14 +130,14 @@ def get_next_event(pg_conn):
         AND eq.attempts < %(max_attempts)s
         AND eq.last_updated <=
             (now() - (interval '30 minutes' * 2 * eq.attempts))
-        AND (eq.depends_on IS NULL OR EXISTS (
+        AND (eq.depends_on IS NULL OR NOT EXISTS (
             SELECT TRUE
             FROM artwork_indexer.event_queue parent_eq
             WHERE array_position(
                 eq.depends_on,
                 parent_eq.id
             ) IS NOT NULL
-            AND parent_eq.state = 'completed'
+            AND parent_eq.state != 'completed'
         ))
         ORDER BY created, id
         LIMIT 1
