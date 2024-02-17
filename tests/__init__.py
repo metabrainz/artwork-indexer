@@ -134,6 +134,7 @@ class MockClientSession():
         self.last_requests = []
         self.next_responses = []
         self.session = requests.Session()
+        self.headers = self.session.headers
 
     def _get_next_response(self):
         if self.next_responses:

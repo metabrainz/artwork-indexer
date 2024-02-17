@@ -179,6 +179,10 @@ def indexer(
     )
 
     http_session = http_client_cls()
+    http_session.headers.update({
+        'user-agent': 'metabrainz/artwork-indexer ' +
+                      f'({requests.utils.default_user_agent()})',
+    })
 
     event_handler_map = {
         entity: cls(config, http_session)
