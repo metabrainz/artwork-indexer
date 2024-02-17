@@ -34,6 +34,7 @@ class PgConnWrapper(object):
         self.conn = psycopg.connect(
             conninfo,
             autocommit=True,
+            prepare_threshold=None,
             row_factory=psycopg.rows.dict_row
         )
 

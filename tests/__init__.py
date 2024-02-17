@@ -187,6 +187,7 @@ class TestArtArchive(unittest.TestCase):
         self.pg_conn = psycopg.connect(
             psycopg.conninfo.make_conninfo(**tests_config['database']),
             autocommit=True,
+            prepare_threshold=None,
             row_factory=psycopg.rows.dict_row,
         )
 
