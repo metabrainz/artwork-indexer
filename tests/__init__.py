@@ -56,7 +56,7 @@ def index_json_put(project, mbid, images):
         'url': f'http://mbid-{mbid}.s3.example.com/index.json',
         'headers': {
             'authorization': 'LOW user:pass',
-            'content-type': 'application/json; charset=US-ASCII',
+            'content-type': 'application/json; charset=UTF-8',
             'x-archive-auto-make-bucket': '1',
             'x-archive-keep-old-version': '1',
             'x-archive-meta-collection': project['ia_collection'],

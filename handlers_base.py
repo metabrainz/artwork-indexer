@@ -117,14 +117,14 @@ class EventHandler:
                 for row in self.fetch_image_rows(pg_conn, gid)
             ],
             kebab(self.entity_type): self.build_canonical_entity_url(gid),
-        }, ensure_ascii=True, sort_keys=True).encode('ascii')
+        }, sort_keys=True).encode('utf-8')
 
         self.http_session.put(
             self.build_s3_item_url(gid, 'index.json'),
             data=encoded_index_json,
             headers={
                 **self.build_authorization_header(),
-                'content-type': 'application/json; charset=US-ASCII',
+                'content-type': 'application/json; charset=UTF-8',
                 'x-archive-auto-make-bucket': '1',
                 'x-archive-keep-old-version': '1',
                 'x-archive-meta-collection': self.ia_collection,
