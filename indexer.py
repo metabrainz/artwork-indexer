@@ -112,7 +112,7 @@ def cleanup_events(pg_conn):
         AND (now() - created) > interval '90 days'
     '''))
     if pg_cur.rowcount:
-        logging.debug(
+        logging.info(
             'Deleted ' + str(pg_cur.rowcount) + ' event' +
             ('s' if pg_cur.rowcount > 1 else '') +
             ' older than 90 days')
@@ -152,8 +152,8 @@ def run_event_handler(pg_conn, event, handler):
     except BaseException as task_exc:
         handle_event_failure(pg_conn, event, task_exc)
     else:
-        logging.debug(
-            'Event id=%s finished succesfully',
+        logging.info(
+            'Event id=%s completed succesfully',
             event['id'],
         )
         pg_conn.execute_with_retry(dedent('''
@@ -206,7 +206,7 @@ def indexer(
 
             if sleep_amount < maxwait:
                 sleep_amount = min(sleep_amount * 2, maxwait)
-                logging.debug(
+                logging.info(
                     'No event found; sleeping for %s second(s)',
                     sleep_amount,
                 )
@@ -248,10 +248,6 @@ def main():
                             dest='config',
                             type=str,
                             default='config.ini')
-    arg_parser.add_argument('--debug',
-                            help='enable debug mode',
-                            dest='debug',
-                            action='store_true')
     arg_parser.add_argument('--max-wait',
                             help='max poll timeout',
                             dest='maxwait',
@@ -260,10 +256,7 @@ def main():
     args = arg_parser.parse_args()
 
     logger = logging.getLogger()
-    if args.debug:
-        logger.setLevel(logging.DEBUG)
-    else:
-        logger.setLevel(logging.INFO)
+    logger.setLevel(logging.INFO)
 
     config = configparser.ConfigParser()
 
