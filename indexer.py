@@ -25,11 +25,11 @@ import traceback
 from math import inf
 from textwrap import dedent
 
-import psycopg
 import requests
 import sentry_sdk
 
 from handlers import EVENT_HANDLER_CLASSES
+from pg_conn_wrapper import PgConnWrapper
 
 # Maximum number of times we should try to handle an event
 # before we give up. This works together with the `attempts`
@@ -66,7 +66,7 @@ def handle_event_failure(pg_conn, event, error):
     # this would cause compounding failures at worst, and bypass any
     # delay in processing we have on the existing event.
 
-    pg_conn.execute(dedent('''
+    pg_conn.execute_with_retry(dedent('''
         UPDATE artwork_indexer.event_queue eq
         SET state = (
             CASE WHEN eq.attempts >= %(max_attempts)s OR EXISTS (
@@ -85,7 +85,7 @@ def handle_event_failure(pg_conn, event, error):
         'event_id': event['id'],
     })
 
-    pg_conn.execute(dedent('''
+    pg_conn.execute_with_retry(dedent('''
         INSERT INTO artwork_indexer.event_failure_reason
             (event, failure_reason)
         VALUES (%(event_id)s, %(error)s)
@@ -156,7 +156,7 @@ def run_event_handler(pg_conn, event, handler):
             'Event id=%s finished succesfully',
             event['id'],
         )
-        pg_conn.execute(dedent('''
+        pg_conn.execute_with_retry(dedent('''
             UPDATE artwork_indexer.event_queue
             SET state = 'completed'
             WHERE id = %(event_id)s
@@ -171,12 +171,7 @@ def indexer(
 ):
     sleep_amount = 1  # seconds
 
-    conninfo = psycopg.conninfo.make_conninfo(**config['database'])
-    pg_conn = psycopg.connect(
-        conninfo,
-        autocommit=True,
-        row_factory=psycopg.rows.dict_row
-    )
+    pg_conn = PgConnWrapper(config)
 
     http_session = http_client_cls()
     http_session.headers.update({
