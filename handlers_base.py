@@ -104,54 +104,59 @@ class EventHandler:
         bucket = self.build_bucket_name(gid)
         return url.format(bucket=bucket, file=filename)
 
-    async def fetch_image_rows(self, pg_conn, entity_gid):
+    def fetch_image_rows(self, pg_conn, entity_gid):
         raise NotImplementedError
 
-    async def index(self, pg_conn, message):
+    def index(self, pg_conn, event):
+        message = event['message']
         gid = message['gid']
 
         encoded_index_json = json.dumps({
             'images': [
                 self.build_image_json(gid, row)
-                for row in await self.fetch_image_rows(pg_conn, gid)
+                for row in self.fetch_image_rows(pg_conn, gid)
             ],
             kebab(self.entity_type): self.build_canonical_entity_url(gid),
-        }, ensure_ascii=True, sort_keys=True).encode('ascii')
+        }, sort_keys=True).encode('utf-8')
 
-        await self.http_session.put(
+        self.http_session.put(
             self.build_s3_item_url(gid, 'index.json'),
             data=encoded_index_json,
             headers={
                 **self.build_authorization_header(),
-                'content-type': 'application/json; charset=US-ASCII',
+                'content-type': 'application/json; charset=UTF-8',
                 'x-archive-auto-make-bucket': '1',
                 'x-archive-keep-old-version': '1',
                 'x-archive-meta-collection': self.ia_collection,
+                'x-archive-meta-mediatype': 'image',
+                'x-archive-meta-noindex': 'true',
             },
-        )
+        ).raise_for_status()
 
         entity_metadata_url = self.build_metadata_url(gid)
         entity_metadata_headers = self.build_metadata_headers()
+        metadata_res = self.http_session.get(entity_metadata_url,
+                                             headers=entity_metadata_headers,
+                                             stream=True)
+        metadata_res.raise_for_status()
+        self.http_session.put(
+            self.build_s3_item_url(
+                gid,
+                self.build_metadata_ia_filename(gid),
+            ),
+            data=metadata_res.content,
+            headers={
+                **self.build_authorization_header(),
+                'content-type': 'application/xml; charset=UTF-8',
+                'x-archive-auto-make-bucket': '1',
+                'x-archive-meta-collection': self.ia_collection,
+                'x-archive-meta-mediatype': 'image',
+                'x-archive-meta-noindex': 'true',
+            },
+        ).raise_for_status()
 
-        async with self.http_session.get(entity_metadata_url,
-                                         headers=entity_metadata_headers) \
-                as response:
-            encoded_entity_metadata = (await response.text()).encode('utf-8')
-            await self.http_session.put(
-                self.build_s3_item_url(
-                    gid,
-                    self.build_metadata_ia_filename(gid),
-                ),
-                data=encoded_entity_metadata,
-                headers={
-                    **self.build_authorization_header(),
-                    'content-type': 'application/xml; charset=UTF-8',
-                    'x-archive-auto-make-bucket': '1',
-                    'x-archive-meta-collection': self.ia_collection,
-                },
-            )
-
-    async def copy_image(self, pg_conn, message):
+    def copy_image(self, pg_conn, event):
+        message = event['message']
         artwork_id = message['artwork_id']
         old_gid = message['old_gid']
         new_gid = message['new_gid']
@@ -176,7 +181,7 @@ class EventHandler:
         )
 
         # Copy the image to the new MBID, and delete the old image.
-        await self.http_session.put(
+        self.http_session.put(
             self.build_s3_item_url(new_gid, new_file_name),
             headers={
                 **self.build_authorization_header(),
@@ -187,10 +192,40 @@ class EventHandler:
                 'x-archive-meta-mediatype': 'image',
                 'x-archive-meta-noindex': 'true',
             },
-        )
+        ).raise_for_status()
 
-    async def delete_image(self, pg_conn, message):
+    def delete_image(self, pg_conn, event):
+        message = event['message']
         gid = message['gid']
+
+        if event['depends_on'] is None:
+            # If a `delete_image` event exists with no parent,
+            # there should be no later `copy_image` event for
+            # the same image. Verify this to be safe.
+            later_copy_image_event = pg_conn.execute(dedent('''
+                SELECT id FROM artwork_indexer.event_queue eq
+                WHERE eq.state = 'queued'
+                AND eq.action = 'copy_image'
+                AND eq.created > %(created)s
+                AND eq.message->'artwork_id' = %(artwork_id)s
+                AND eq.message->'old_gid' = %(gid)s
+                AND eq.message->'suffix' = %(suffix)s
+                LIMIT 1
+            '''), {
+                'created': event['created'],
+                'artwork_id': json.dumps(message['artwork_id']),
+                'gid': json.dumps(gid),
+                'suffix': json.dumps(message['suffix']),
+            }).fetchone()
+
+            if later_copy_image_event:
+                latest_copy_image_event_id = later_copy_image_event['id']
+                raise Exception(
+                    'This image cannot be deleted, because ' +
+                    'a later event exists ' +
+                    f'(id={latest_copy_image_event_id}) ' +
+                    'that wants to copy it.'
+                )
 
         filename = IMAGE_FILE_FORMAT.format(
             bucket=self.build_bucket_name(gid),
@@ -199,26 +234,32 @@ class EventHandler:
         )
         # Note: This request should succeed (204) even if the file
         # no longer exists.
-        await self.http_session.delete(
+        self.http_session.delete(
             self.build_s3_item_url(gid, filename),
             headers={
                 **self.build_authorization_header(),
                 'x-archive-keep-old-version': '1',
                 'x-archive-cascade-delete': '1',
             },
-        )
+        ).raise_for_status()
 
-    async def deindex(self, pg_conn, message):
+    def deindex(self, pg_conn, event):
+        message = event['message']
         # Note: This request should succeed (204) even if the file
         # no longer exists.
-        await self.http_session.delete(
+        self.http_session.delete(
             self.build_s3_item_url(message['gid'], 'index.json'),
             headers={
                 **self.build_authorization_header(),
                 'x-archive-keep-old-version': '1',
                 'x-archive-cascade-delete': '1',
             },
-        )
+        ).raise_for_status()
+
+    def noop(self, pg_conn, event):
+        message = event['message']
+        if message.get('fail'):
+            raise Exception('Failure (no-op)')
 
 
 class MusicBrainzEventHandler(EventHandler):
@@ -279,18 +320,18 @@ class MusicBrainzEventHandler(EventHandler):
             headers['mb-set-database'] = database
         return headers
 
-    async def fetch_image_rows(self, pg_conn, mbid):
+    def fetch_image_rows(self, pg_conn, mbid):
         schema = self.artwork_schema
         entity_type = self.entity_type
 
         # Note: cover_art_archive.image_type is also used by the
         # event_art_archive schema.
-        return await pg_conn.fetch(
+        return pg_conn.execute(
             dedent('''
                 SELECT * FROM {schema}.index_listing
                 JOIN cover_art_archive.image_type USING (mime_type)
-                WHERE {entity} = (SELECT id FROM {entity} WHERE gid = $1)
+                WHERE {entity} = (SELECT id FROM {entity} WHERE gid = %(gid)s)
                 ORDER BY ordering
             '''.format(schema=schema, entity=entity_type)),
-            mbid,
-        )
+            {'gid': mbid},
+        ).fetchall()

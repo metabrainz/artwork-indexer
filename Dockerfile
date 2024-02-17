@@ -1,8 +1,10 @@
-FROM metabrainz/python:3.9-focal-20211007
+FROM metabrainz/python:3.11-20231006
 
 RUN useradd --create-home --shell /bin/bash art
 
 WORKDIR /home/art/artwork-indexer
+
+COPY --chown=art:art requirements.txt ./
 
 RUN chown art:art /home/art/artwork-indexer && \
     apt-get update && \
@@ -10,12 +12,12 @@ RUN chown art:art /home/art/artwork-indexer && \
         --no-install-recommends \
         --no-install-suggests \
         -y \
+        build-essential \
         sudo && \
+    pip install --upgrade pip && \
+    sudo -E -H -u art pip install --user -r requirements.txt && \
+    apt-get purge --auto-remove -y build-essential && \
     rm -rf /var/lib/apt/lists/*
-
-COPY --chown=art:art requirements.txt ./
-
-RUN sudo -E -H -u art pip install --user -r requirements.txt
 
 COPY --chown=art:art \
     docker/config.ini.ctmpl \

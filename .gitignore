@@ -1,4 +1,8 @@
+*,cover
+.coverage
+.venv/
 __pycache__/
 config.ini
 config.tests.ini
+coverage.xml
 env/

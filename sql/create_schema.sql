@@ -15,7 +15,8 @@ CREATE TYPE event_queue_action AS ENUM (
     'index',
     'copy_image',
     'delete_image',
-    'deindex'
+    'deindex',
+    'noop'
 );
 
 CREATE TYPE event_state AS ENUM (
@@ -31,7 +32,7 @@ CREATE TYPE event_state AS ENUM (
     'queued',
     -- 'running' events have started processing and are currently
     -- being handled by the indexer process.  Events generally must
-    -- perform asynchronous database queries and HTTP requests
+    -- perform synchronous database queries and HTTP requests
     -- so may take some time to complete.
     --
     -- If a running event encounters an error, and the value of the
@@ -53,12 +54,12 @@ CREATE TYPE event_state AS ENUM (
 );
 
 CREATE TABLE event_queue (
-    id                  SERIAL,
+    id                  BIGSERIAL,
     state               event_state NOT NULL DEFAULT 'queued',
     entity_type         indexable_entity_type NOT NULL,
     action              event_queue_action NOT NULL,
     message             JSONB NOT NULL,
-    depends_on          INTEGER[],
+    depends_on          BIGINT[],
     created             TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     -- Note `event_queue_idx_queued_uniq` below. Due to the requirement
     -- that queued events be unique, external triggers should have an

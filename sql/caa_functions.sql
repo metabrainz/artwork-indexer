@@ -6,7 +6,7 @@ BEGIN;
 
 SET LOCAL search_path = cover_art_archive;
 
-CREATE OR REPLACE FUNCTION a_ins_cover_art() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION artwork_indexer_a_ins_cover_art() RETURNS trigger AS $$
 DECLARE
     release_gid UUID;
 BEGIN
@@ -21,13 +21,13 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION a_upd_cover_art() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION artwork_indexer_a_upd_cover_art() RETURNS trigger AS $$
 DECLARE
     suffix TEXT;
     old_release_gid UUID;
     new_release_gid UUID;
-    copy_event_id INTEGER;
-    delete_event_id INTEGER;
+    copy_event_id BIGINT;
+    delete_event_id BIGINT;
 BEGIN
     SELECT cover_art_archive.image_type.suffix, old_release.gid, new_release.gid
     INTO STRICT suffix, old_release_gid, new_release_gid
@@ -55,11 +55,11 @@ BEGIN
         ))
         RETURNING id INTO STRICT copy_event_id;
 
-        INSERT INTO artwork_indexer.event_queue (entity_type, action, message, depends_on) VALUES ('release', 'delete_image', jsonb_build_object('artwork_id', OLD.id, 'gid', old_release_gid, 'suffix', suffix), array[copy_event_id]::integer[]) RETURNING id INTO STRICT delete_event_id;
+        INSERT INTO artwork_indexer.event_queue (entity_type, action, message, depends_on) VALUES ('release', 'delete_image', jsonb_build_object('artwork_id', OLD.id, 'gid', old_release_gid, 'suffix', suffix), array[copy_event_id]) RETURNING id INTO STRICT delete_event_id;
 
         -- If there's an existing, queued index event, reset its parent to our
         -- deletion event (i.e. delay it until after the deletion executes).
-        INSERT INTO artwork_indexer.event_queue (entity_type, action, message, depends_on) VALUES ('release', 'index', jsonb_build_object('gid', old_release_gid), array[delete_event_id]::integer[]), ('release', 'index', jsonb_build_object('gid', new_release_gid), array[delete_event_id]::integer[]) ON CONFLICT (entity_type, action, message) WHERE state = 'queued' DO UPDATE SET depends_on = (coalesce(artwork_indexer.event_queue.depends_on, '{}') || delete_event_id);
+        INSERT INTO artwork_indexer.event_queue (entity_type, action, message, depends_on) VALUES ('release', 'index', jsonb_build_object('gid', old_release_gid), array[delete_event_id]), ('release', 'index', jsonb_build_object('gid', new_release_gid), array[delete_event_id]) ON CONFLICT (entity_type, action, message) WHERE state = 'queued' DO UPDATE SET depends_on = (coalesce(artwork_indexer.event_queue.depends_on, '{}') || delete_event_id);
     ELSE
         INSERT INTO artwork_indexer.event_queue (entity_type, action, message) VALUES ('release', 'index', jsonb_build_object('gid', old_release_gid)), ('release', 'index', jsonb_build_object('gid', new_release_gid)) ON CONFLICT DO NOTHING;
     END IF;
@@ -68,12 +68,12 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION a_del_cover_art()
+CREATE OR REPLACE FUNCTION artwork_indexer_a_del_cover_art()
 RETURNS trigger AS $$
 DECLARE
     suffix TEXT;
     release_gid UUID;
-    delete_event_id INTEGER;
+    delete_event_id BIGINT;
 BEGIN
     SELECT cover_art_archive.image_type.suffix, musicbrainz.release.gid
     INTO STRICT suffix, release_gid
@@ -82,13 +82,13 @@ BEGIN
     WHERE musicbrainz.release.id = OLD.release;
 
     INSERT INTO artwork_indexer.event_queue (entity_type, action, message) VALUES ('release', 'delete_image', jsonb_build_object('artwork_id', OLD.id, 'gid', release_gid, 'suffix', suffix)) RETURNING id INTO STRICT delete_event_id;
-    INSERT INTO artwork_indexer.event_queue (entity_type, action, message, depends_on) VALUES ('release', 'index', jsonb_build_object('gid', release_gid), array[delete_event_id]::integer[]) ON CONFLICT (entity_type, action, message) WHERE state = 'queued' DO UPDATE SET depends_on = (coalesce(artwork_indexer.event_queue.depends_on, '{}') || delete_event_id);
+    INSERT INTO artwork_indexer.event_queue (entity_type, action, message, depends_on) VALUES ('release', 'index', jsonb_build_object('gid', release_gid), array[delete_event_id]) ON CONFLICT (entity_type, action, message) WHERE state = 'queued' DO UPDATE SET depends_on = (coalesce(artwork_indexer.event_queue.depends_on, '{}') || delete_event_id);
 
     RETURN OLD;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION a_ins_cover_art_type() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION artwork_indexer_a_ins_cover_art_type() RETURNS trigger AS $$
 DECLARE
     release_gid UUID;
 BEGIN
@@ -104,7 +104,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION a_del_cover_art_type() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION artwork_indexer_a_del_cover_art_type() RETURNS trigger AS $$
 DECLARE
     release_gid UUID;
 BEGIN
@@ -124,7 +124,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION a_del_release() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION artwork_indexer_a_del_release() RETURNS trigger AS $$
 BEGIN
     INSERT INTO artwork_indexer.event_queue (entity_type, action, message)
     VALUES ('release', 'deindex', jsonb_build_object('gid', OLD.gid))
@@ -142,14 +142,18 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION a_upd_artist() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION artwork_indexer_a_upd_artist() RETURNS trigger AS $$
 BEGIN
     IF (OLD.name != NEW.name OR OLD.sort_name != NEW.sort_name) THEN
         INSERT INTO artwork_indexer.event_queue (entity_type, action, message) (
             SELECT 'release', 'index', jsonb_build_object('gid', musicbrainz.release.gid)
             FROM musicbrainz.release
             JOIN musicbrainz.artist_credit_name ON musicbrainz.artist_credit_name.artist_credit = musicbrainz.release.artist_credit
-            WHERE musicbrainz.artist_credit_name.artist = NEW.id
+            WHERE EXISTS (
+                SELECT 1 FROM cover_art_archive.cover_art
+                WHERE cover_art_archive.cover_art.release = musicbrainz.release.id
+            )
+            AND musicbrainz.artist_credit_name.artist = NEW.id
         )
         ON CONFLICT DO NOTHING;
     END IF;
@@ -158,11 +162,18 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION a_upd_release() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION artwork_indexer_a_upd_release() RETURNS trigger AS $$
 BEGIN
     IF (OLD.name != NEW.name OR OLD.artist_credit != NEW.artist_credit OR OLD.language IS DISTINCT FROM NEW.language OR OLD.barcode IS DISTINCT FROM NEW.barcode) THEN
-        INSERT INTO artwork_indexer.event_queue (entity_type, action, message)
-        VALUES ('release', 'index', jsonb_build_object('gid', NEW.gid))
+        INSERT INTO artwork_indexer.event_queue (entity_type, action, message) (
+            SELECT 'release', 'index', jsonb_build_object('gid', musicbrainz.release.gid)
+            FROM musicbrainz.release
+            WHERE EXISTS (
+                SELECT 1 FROM cover_art_archive.cover_art
+                WHERE cover_art_archive.cover_art.release = musicbrainz.release.id
+            )
+            AND musicbrainz.release.gid = NEW.gid
+        )
         ON CONFLICT DO NOTHING;
     END IF;
 
@@ -170,13 +181,17 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION a_upd_release_meta() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION artwork_indexer_a_upd_release_meta() RETURNS trigger AS $$
 BEGIN
     IF (OLD.amazon_asin IS DISTINCT FROM NEW.amazon_asin) THEN
         INSERT INTO artwork_indexer.event_queue (entity_type, action, message) (
             SELECT 'release', 'index', jsonb_build_object('gid', musicbrainz.release.gid)
             FROM musicbrainz.release
-            WHERE musicbrainz.release.id = NEW.id
+            WHERE EXISTS (
+                SELECT 1 FROM cover_art_archive.cover_art
+                WHERE cover_art_archive.cover_art.release = musicbrainz.release.id
+            )
+            AND musicbrainz.release.id = NEW.id
         )
         ON CONFLICT DO NOTHING;
     END IF;
@@ -185,12 +200,16 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION a_ins_release_first_release_date() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION artwork_indexer_a_ins_release_first_release_date() RETURNS trigger AS $$
 BEGIN
     INSERT INTO artwork_indexer.event_queue (entity_type, action, message) (
         SELECT 'release', 'index', jsonb_build_object('gid', musicbrainz.release.gid)
         FROM musicbrainz.release
-        WHERE musicbrainz.release.id = NEW.release
+        WHERE EXISTS (
+            SELECT 1 FROM cover_art_archive.cover_art
+            WHERE cover_art_archive.cover_art.release = musicbrainz.release.id
+        )
+        AND musicbrainz.release.id = NEW.release
     )
     ON CONFLICT DO NOTHING;
 
@@ -198,12 +217,16 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION a_del_release_first_release_date() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION artwork_indexer_a_del_release_first_release_date() RETURNS trigger AS $$
 BEGIN
     INSERT INTO artwork_indexer.event_queue (entity_type, action, message) (
         SELECT 'release', 'index', jsonb_build_object('gid', musicbrainz.release.gid)
         FROM musicbrainz.release
-        WHERE musicbrainz.release.id = OLD.release
+        WHERE EXISTS (
+            SELECT 1 FROM cover_art_archive.cover_art
+            WHERE cover_art_archive.cover_art.release = musicbrainz.release.id
+        )
+        AND musicbrainz.release.id = OLD.release
     )
     ON CONFLICT DO NOTHING;
 

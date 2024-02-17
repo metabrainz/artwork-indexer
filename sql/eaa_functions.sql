@@ -6,7 +6,7 @@ BEGIN;
 
 SET LOCAL search_path = event_art_archive;
 
-CREATE OR REPLACE FUNCTION a_ins_event_art() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION artwork_indexer_a_ins_event_art() RETURNS trigger AS $$
 DECLARE
     event_gid UUID;
 BEGIN
@@ -21,13 +21,13 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION a_upd_event_art() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION artwork_indexer_a_upd_event_art() RETURNS trigger AS $$
 DECLARE
     suffix TEXT;
     old_event_gid UUID;
     new_event_gid UUID;
-    copy_event_id INTEGER;
-    delete_event_id INTEGER;
+    copy_event_id BIGINT;
+    delete_event_id BIGINT;
 BEGIN
     SELECT cover_art_archive.image_type.suffix, old_event.gid, new_event.gid
     INTO STRICT suffix, old_event_gid, new_event_gid
@@ -55,11 +55,11 @@ BEGIN
         ))
         RETURNING id INTO STRICT copy_event_id;
 
-        INSERT INTO artwork_indexer.event_queue (entity_type, action, message, depends_on) VALUES ('event', 'delete_image', jsonb_build_object('artwork_id', OLD.id, 'gid', old_event_gid, 'suffix', suffix), array[copy_event_id]::integer[]) RETURNING id INTO STRICT delete_event_id;
+        INSERT INTO artwork_indexer.event_queue (entity_type, action, message, depends_on) VALUES ('event', 'delete_image', jsonb_build_object('artwork_id', OLD.id, 'gid', old_event_gid, 'suffix', suffix), array[copy_event_id]) RETURNING id INTO STRICT delete_event_id;
 
         -- If there's an existing, queued index event, reset its parent to our
         -- deletion event (i.e. delay it until after the deletion executes).
-        INSERT INTO artwork_indexer.event_queue (entity_type, action, message, depends_on) VALUES ('event', 'index', jsonb_build_object('gid', old_event_gid), array[delete_event_id]::integer[]), ('event', 'index', jsonb_build_object('gid', new_event_gid), array[delete_event_id]::integer[]) ON CONFLICT (entity_type, action, message) WHERE state = 'queued' DO UPDATE SET depends_on = (coalesce(artwork_indexer.event_queue.depends_on, '{}') || delete_event_id);
+        INSERT INTO artwork_indexer.event_queue (entity_type, action, message, depends_on) VALUES ('event', 'index', jsonb_build_object('gid', old_event_gid), array[delete_event_id]), ('event', 'index', jsonb_build_object('gid', new_event_gid), array[delete_event_id]) ON CONFLICT (entity_type, action, message) WHERE state = 'queued' DO UPDATE SET depends_on = (coalesce(artwork_indexer.event_queue.depends_on, '{}') || delete_event_id);
     ELSE
         INSERT INTO artwork_indexer.event_queue (entity_type, action, message) VALUES ('event', 'index', jsonb_build_object('gid', old_event_gid)), ('event', 'index', jsonb_build_object('gid', new_event_gid)) ON CONFLICT DO NOTHING;
     END IF;
@@ -68,12 +68,12 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION a_del_event_art()
+CREATE OR REPLACE FUNCTION artwork_indexer_a_del_event_art()
 RETURNS trigger AS $$
 DECLARE
     suffix TEXT;
     event_gid UUID;
-    delete_event_id INTEGER;
+    delete_event_id BIGINT;
 BEGIN
     SELECT cover_art_archive.image_type.suffix, musicbrainz.event.gid
     INTO STRICT suffix, event_gid
@@ -82,13 +82,13 @@ BEGIN
     WHERE musicbrainz.event.id = OLD.event;
 
     INSERT INTO artwork_indexer.event_queue (entity_type, action, message) VALUES ('event', 'delete_image', jsonb_build_object('artwork_id', OLD.id, 'gid', event_gid, 'suffix', suffix)) RETURNING id INTO STRICT delete_event_id;
-    INSERT INTO artwork_indexer.event_queue (entity_type, action, message, depends_on) VALUES ('event', 'index', jsonb_build_object('gid', event_gid), array[delete_event_id]::integer[]) ON CONFLICT (entity_type, action, message) WHERE state = 'queued' DO UPDATE SET depends_on = (coalesce(artwork_indexer.event_queue.depends_on, '{}') || delete_event_id);
+    INSERT INTO artwork_indexer.event_queue (entity_type, action, message, depends_on) VALUES ('event', 'index', jsonb_build_object('gid', event_gid), array[delete_event_id]) ON CONFLICT (entity_type, action, message) WHERE state = 'queued' DO UPDATE SET depends_on = (coalesce(artwork_indexer.event_queue.depends_on, '{}') || delete_event_id);
 
     RETURN OLD;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION a_ins_event_art_type() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION artwork_indexer_a_ins_event_art_type() RETURNS trigger AS $$
 DECLARE
     event_gid UUID;
 BEGIN
@@ -104,7 +104,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION a_del_event_art_type() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION artwork_indexer_a_del_event_art_type() RETURNS trigger AS $$
 DECLARE
     event_gid UUID;
 BEGIN
@@ -124,7 +124,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION a_del_event() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION artwork_indexer_a_del_event() RETURNS trigger AS $$
 BEGIN
     INSERT INTO artwork_indexer.event_queue (entity_type, action, message)
     VALUES ('event', 'deindex', jsonb_build_object('gid', OLD.gid))
@@ -142,11 +142,18 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION a_upd_event() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION artwork_indexer_a_upd_event() RETURNS trigger AS $$
 BEGIN
     IF (OLD.name != NEW.name) THEN
-        INSERT INTO artwork_indexer.event_queue (entity_type, action, message)
-        VALUES ('event', 'index', jsonb_build_object('gid', NEW.gid))
+        INSERT INTO artwork_indexer.event_queue (entity_type, action, message) (
+            SELECT 'event', 'index', jsonb_build_object('gid', musicbrainz.event.gid)
+            FROM musicbrainz.event
+            WHERE EXISTS (
+                SELECT 1 FROM event_art_archive.event_art
+                WHERE event_art_archive.event_art.event = musicbrainz.event.id
+            )
+            AND musicbrainz.event.gid = NEW.gid
+        )
         ON CONFLICT DO NOTHING;
     END IF;
 

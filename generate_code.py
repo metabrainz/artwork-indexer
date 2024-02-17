@@ -66,7 +66,7 @@ for project in PROJECTS:
         q_im_table = f'{im_schema}.{im_table}'
 
         for tg_op in im['tg_ops']:
-            extra_functions_source += f'\nCREATE OR REPLACE FUNCTION a_{tg_op}_{im_table}() RETURNS trigger AS $$\n'
+            extra_functions_source += f'\nCREATE OR REPLACE FUNCTION artwork_indexer_a_{tg_op}_{im_table}() RETURNS trigger AS $$\n'
             extra_functions_source += 'BEGIN\n'
 
             tg_rowvar = 'OLD' if tg_op == 'del' else 'NEW'
@@ -88,29 +88,36 @@ for project in PROJECTS:
 
             extra_functions_source += f'{indent}INSERT INTO artwork_indexer.event_queue (entity_type, action, message)'
 
+            indent += '    '
+            extra_functions_source += ' (\n'
+            extra_functions_source += f"{indent}SELECT '{entity_type}', 'index', jsonb_build_object('gid', {q_entity_table}.gid)\n"
+            extra_functions_source += f'{indent}FROM {q_entity_table}\n'
+
+            for join in im.get('joins', ()):
+                (lhs_schema, lhs_table, lhs_col) = join['lhs']
+                (rhs_schema, rhs_table, rhs_col) = join['rhs']
+
+                q_lhs_table = f'{lhs_schema}.{lhs_table}'
+                q_rhs_table = f'{rhs_schema}.{rhs_table}'
+
+                extra_functions_source += f'{indent}JOIN {q_lhs_table} ON {q_lhs_table}.{lhs_col} = {q_rhs_table}.{rhs_col}\n'
+
+            extra_functions_source += f'{indent}WHERE EXISTS (\n'
+            indent += '    '
+            extra_functions_source += f'{indent}SELECT 1 FROM {q_art_table}\n'
+            extra_functions_source += f'{indent}WHERE {q_art_table}.{entity_type} = {q_entity_table}.id\n'
+            indent = indent[:-4]
+            extra_functions_source += f'{indent})\n'
+
             if q_im_table == q_entity_table:
-                extra_functions_source += f"\n{indent}VALUES ('{entity_type}', 'index', jsonb_build_object('gid', {tg_rowvar}.gid))\n"
-            else:
-                indent += '    '
-                extra_functions_source += ' (\n'
-                extra_functions_source += f"{indent}SELECT '{entity_type}', 'index', jsonb_build_object('gid', {q_entity_table}.gid)\n"
-                extra_functions_source += f'{indent}FROM {q_entity_table}\n'
+                extra_functions_source += f"{indent}AND {q_entity_table}.gid = {tg_rowvar}.gid\n"
 
-                for join in im.get('joins', ()):
-                    (lhs_schema, lhs_table, lhs_col) = join['lhs']
-                    (rhs_schema, rhs_table, rhs_col) = join['rhs']
+            im_condition = im.get('condition')
+            if im_condition:
+                extra_functions_source += f'{indent}AND {im_condition.format(tg_rowvar=tg_rowvar)}\n'
 
-                    q_lhs_table = f'{lhs_schema}.{lhs_table}'
-                    q_rhs_table = f'{rhs_schema}.{rhs_table}'
-
-                    extra_functions_source += f'{indent}JOIN {q_lhs_table} ON {q_lhs_table}.{lhs_col} = {q_rhs_table}.{rhs_col}\n'
-
-                im_condition = im.get('condition')
-                if im_condition:
-                    extra_functions_source += f'{indent}WHERE {im_condition.format(tg_rowvar=tg_rowvar)}\n'
-
-                indent = indent[:-4]
-                extra_functions_source += f'{indent})\n'
+            indent = indent[:-4]
+            extra_functions_source += f'{indent})\n'
 
             extra_functions_source += f'{indent}ON CONFLICT DO NOTHING;\n'
             if col_comparisons:
@@ -121,8 +128,8 @@ for project in PROJECTS:
             extra_functions_source += 'END;\n'
             extra_functions_source += '$$ LANGUAGE plpgsql;\n'
 
-            tg_fn_name = f'a_{tg_op}_{im_table}'
-            tg_name = f'{tg_fn_name}_{abbr}'
+            tg_fn_name = f'artwork_indexer_a_{tg_op}_{im_table}'
+            tg_name = f'{tg_fn_name}'
 
             extra_triggers_source += dedent(f'''
                 DROP TRIGGER IF EXISTS {tg_name} ON {q_im_table};
@@ -141,7 +148,7 @@ for project in PROJECTS:
         stmt += ', '.join([
             (
                 f"('{entity_type}', 'index', jsonb_build_object('gid', {gid})" +
-                (f", array[{parent}]::integer[])" if parent else ')')
+                (f", array[{parent}])" if parent else ')')
             ) for gid in gids
         ])
         stmt += ' ON CONFLICT ';
@@ -165,7 +172,7 @@ for project in PROJECTS:
         stmt += f"'suffix', {suffix}"
         stmt += ')'
         if parent:
-            stmt += f", array[{parent}]::integer[]"
+            stmt += f", array[{parent}]"
         stmt += f') RETURNING id INTO STRICT {return_var};'
         return stmt
 
@@ -178,7 +185,7 @@ for project in PROJECTS:
 
         SET LOCAL search_path = {art_schema};
 
-        CREATE OR REPLACE FUNCTION a_ins_{art_table}() RETURNS trigger AS $$
+        CREATE OR REPLACE FUNCTION artwork_indexer_a_ins_{art_table}() RETURNS trigger AS $$
         DECLARE
             {entity_type}_gid UUID;
         BEGIN
@@ -193,13 +200,13 @@ for project in PROJECTS:
         END;
         $$ LANGUAGE plpgsql;
 
-        CREATE OR REPLACE FUNCTION a_upd_{art_table}() RETURNS trigger AS $$
+        CREATE OR REPLACE FUNCTION artwork_indexer_a_upd_{art_table}() RETURNS trigger AS $$
         DECLARE
             suffix TEXT;
             old_{entity_type}_gid UUID;
             new_{entity_type}_gid UUID;
-            copy_event_id INTEGER;
-            delete_event_id INTEGER;
+            copy_event_id BIGINT;
+            delete_event_id BIGINT;
         BEGIN
             SELECT {q_image_type_table}.suffix, old_{entity_type}.gid, new_{entity_type}.gid
             INTO STRICT suffix, old_{entity_type}_gid, new_{entity_type}_gid
@@ -240,12 +247,12 @@ for project in PROJECTS:
         END;
         $$ LANGUAGE plpgsql;
 
-        CREATE OR REPLACE FUNCTION a_del_{art_table}()
+        CREATE OR REPLACE FUNCTION artwork_indexer_a_del_{art_table}()
         RETURNS trigger AS $$
         DECLARE
             suffix TEXT;
             {entity_type}_gid UUID;
-            delete_event_id INTEGER;
+            delete_event_id BIGINT;
         BEGIN
             SELECT {q_image_type_table}.suffix, {q_entity_table}.gid
             INTO STRICT suffix, {entity_type}_gid
@@ -260,7 +267,7 @@ for project in PROJECTS:
         END;
         $$ LANGUAGE plpgsql;
 
-        CREATE OR REPLACE FUNCTION a_ins_{art_table}_type() RETURNS trigger AS $$
+        CREATE OR REPLACE FUNCTION artwork_indexer_a_ins_{art_table}_type() RETURNS trigger AS $$
         DECLARE
             {entity_type}_gid UUID;
         BEGIN
@@ -276,7 +283,7 @@ for project in PROJECTS:
         END;
         $$ LANGUAGE plpgsql;
 
-        CREATE OR REPLACE FUNCTION a_del_{art_table}_type() RETURNS trigger AS $$
+        CREATE OR REPLACE FUNCTION artwork_indexer_a_del_{art_table}_type() RETURNS trigger AS $$
         DECLARE
             {entity_type}_gid UUID;
         BEGIN
@@ -296,7 +303,7 @@ for project in PROJECTS:
         END;
         $$ LANGUAGE plpgsql;
 
-        CREATE OR REPLACE FUNCTION a_del_{entity_table}() RETURNS trigger AS $$
+        CREATE OR REPLACE FUNCTION artwork_indexer_a_del_{entity_table}() RETURNS trigger AS $$
         BEGIN
             INSERT INTO artwork_indexer.event_queue (entity_type, action, message)
             VALUES ('{entity_type}', 'deindex', jsonb_build_object('gid', OLD.gid))
@@ -335,41 +342,41 @@ for project in PROJECTS:
         -- We drop the triggers first to simulate "CREATE OR REPLACE,"
         -- which isn't implemented for "CREATE TRIGGER."
 
-        DROP TRIGGER IF EXISTS a_ins_{art_table}_{abbr} ON {art_schema}.{art_table};
+        DROP TRIGGER IF EXISTS artwork_indexer_a_ins_{art_table} ON {art_schema}.{art_table};
 
-        CREATE TRIGGER a_ins_{art_table}_{abbr} AFTER INSERT
+        CREATE TRIGGER artwork_indexer_a_ins_{art_table} AFTER INSERT
             ON {art_schema}.{art_table} FOR EACH ROW
-            EXECUTE PROCEDURE {art_schema}.a_ins_{art_table}();
+            EXECUTE PROCEDURE {art_schema}.artwork_indexer_a_ins_{art_table}();
 
-        DROP TRIGGER IF EXISTS a_upd_{art_table}_{abbr} ON {art_schema}.{art_table};
+        DROP TRIGGER IF EXISTS artwork_indexer_a_upd_{art_table} ON {art_schema}.{art_table};
 
-        CREATE TRIGGER a_upd_{art_table}_{abbr} AFTER UPDATE
+        CREATE TRIGGER artwork_indexer_a_upd_{art_table} AFTER UPDATE
             ON {art_schema}.{art_table} FOR EACH ROW
-            EXECUTE PROCEDURE {art_schema}.a_upd_{art_table}();
+            EXECUTE PROCEDURE {art_schema}.artwork_indexer_a_upd_{art_table}();
 
-        DROP TRIGGER IF EXISTS a_del_{art_table}_{abbr} ON {art_schema}.{art_table};
+        DROP TRIGGER IF EXISTS artwork_indexer_a_del_{art_table} ON {art_schema}.{art_table};
 
-        CREATE TRIGGER a_del_{art_table}_{abbr} AFTER DELETE
+        CREATE TRIGGER artwork_indexer_a_del_{art_table} AFTER DELETE
             ON {art_schema}.{art_table} FOR EACH ROW
-            EXECUTE PROCEDURE {art_schema}.a_del_{art_table}();
+            EXECUTE PROCEDURE {art_schema}.artwork_indexer_a_del_{art_table}();
 
-        DROP TRIGGER IF EXISTS a_ins_{art_table}_type_{abbr} ON {art_schema}.{art_table}_type;
+        DROP TRIGGER IF EXISTS artwork_indexer_a_ins_{art_table}_type ON {art_schema}.{art_table}_type;
 
-        CREATE TRIGGER a_ins_{art_table}_type_{abbr} AFTER INSERT
+        CREATE TRIGGER artwork_indexer_a_ins_{art_table}_type AFTER INSERT
             ON {art_schema}.{art_table}_type FOR EACH ROW
-            EXECUTE PROCEDURE {art_schema}.a_ins_{art_table}_type();
+            EXECUTE PROCEDURE {art_schema}.artwork_indexer_a_ins_{art_table}_type();
 
-        DROP TRIGGER IF EXISTS a_del_{art_table}_type_{abbr} ON {art_schema}.{art_table}_type;
+        DROP TRIGGER IF EXISTS artwork_indexer_a_del_{art_table}_type ON {art_schema}.{art_table}_type;
 
-        CREATE TRIGGER a_del_{art_table}_type_{abbr} AFTER DELETE
+        CREATE TRIGGER artwork_indexer_a_del_{art_table}_type AFTER DELETE
             ON {art_schema}.{art_table}_type FOR EACH ROW
-            EXECUTE PROCEDURE {art_schema}.a_del_{art_table}_type();
+            EXECUTE PROCEDURE {art_schema}.artwork_indexer_a_del_{art_table}_type();
 
-        DROP TRIGGER IF EXISTS a_del_{entity_table}_{abbr} ON {entity_schema}.{entity_table};
+        DROP TRIGGER IF EXISTS artwork_indexer_a_del_{entity_table} ON {entity_schema}.{entity_table};
 
-        CREATE TRIGGER a_del_{entity_table}_{abbr} AFTER DELETE
+        CREATE TRIGGER artwork_indexer_a_del_{entity_table} AFTER DELETE
             ON {entity_schema}.{entity_table} FOR EACH ROW
-            EXECUTE PROCEDURE {art_schema}.a_del_{entity_table}();
+            EXECUTE PROCEDURE {art_schema}.artwork_indexer_a_del_{entity_table}();
         ''')
 
     triggers_source += extra_triggers_source + '\n'

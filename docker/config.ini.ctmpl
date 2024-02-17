@@ -1,20 +1,19 @@
-{{- $svc := "docker-server-configs/services/caa-indexer.json/" }}
-{{- $const := "docker-server-configs/constants.json/" }}
+{{- $key_prefix := printf "docker-server-configs/services/artwork-indexer.%s.json/" (env "DEPLOY_ENV") }}
 
 [musicbrainz]
-url=https://musicbrainz.org
+url={{ keyOrDefault (print $key_prefix "musicbrainz_url") "https://musicbrainz.org" }}
 
 [database]
-{{- with service "pgbouncer-master" }}
+{{- with service (envOrDefault "POSTGRES_SERVICE_NAME" "pgbouncer-master") }}
 {{- with index . 0 }}
-host={{.Address}}
-port={{.Port}}
+host={{ .Address }}
+port={{ .Port }}
 {{- end }}
 {{- end }}
-user={{ keyOrDefault (print $svc "postgres_user") "musicbrainz" }}
-database={{ keyOrDefault (print $svc "postgres_database") "musicbrainz_db" }}
+user={{ keyOrDefault (print $key_prefix "postgres_user") "musicbrainz" }}
+dbname={{ keyOrDefault (print $key_prefix "postgres_database") "musicbrainz_db" }}
 
 [s3]
-url=https://{bucket}.s3.us.archive.org/{file}
-access={{ keyOrDefault (print $const "caa_access_key") "" }}
-secret={{ keyOrDefault (print $const "caa_secret_key") "" }}
+url={{ keyOrDefault (print $key_prefix "s3_url") "https://{bucket}.s3.us.archive.org/{file}" }}
+access={{ keyOrDefault (print $key_prefix "s3_access_key") "" }}
+secret={{ keyOrDefault (print $key_prefix "s3_secret_key") "" }}

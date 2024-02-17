@@ -1,14 +1,9 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 set -e
 
-sudo -u postgres dropdb musicbrainz_test_artwork_indexer
-createdb -O musicbrainz -T musicbrainz_test -U postgres musicbrainz_test_artwork_indexer
+cd "$(dirname "${BASH_SOURCE[0]}")"
 
-psql -U musicbrainz -d musicbrainz_test_artwork_indexer -f sql/create.sql
-psql -U musicbrainz -d musicbrainz_test_artwork_indexer -f sql/caa_functions.sql
-psql -U musicbrainz -d musicbrainz_test_artwork_indexer -f sql/eaa_functions.sql
-psql -U musicbrainz -d musicbrainz_test_artwork_indexer -f sql/caa_triggers.sql
-psql -U musicbrainz -d musicbrainz_test_artwork_indexer -f sql/eaa_triggers.sql
+./create_test_db.sh
 
-exec python tests.py
+exec coverage run -m unittest discover . "test_*.py"

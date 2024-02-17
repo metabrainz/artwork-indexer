@@ -15,7 +15,7 @@ Succesor to the old, Perl-and-RabbitMQ-based
 
 ## Requirements
 
-  * Python >= 3.9
+  * Python >= 3.11
   * PostgreSQL >= 12
 
 You will need a MusicBrainz database. See the `INSTALL.md` document of the
