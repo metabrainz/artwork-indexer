@@ -54,8 +54,8 @@ def handle_event_failure(pg_conn, event, error):
     #       while this one was running)
     #
     # Otherwise, the event stays queued and is retried later based on
-    # the number of attempts so far. (See the `indexer` function below
-    # for how this delay calculated.)
+    # the number of attempts so far. (See the `get_next_event` function
+    # below for how this delay calculated.)
     #
     # Identical 'queued' events are blocked at the database level by a
     # UNIQUE INDEX, `event_queue_idx_queued_uniq`. This prevents
