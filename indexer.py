@@ -91,6 +91,8 @@ def handle_event_failure(pg_conn, event, error):
         VALUES (%(event_id)s, %(error)s)
     '''), {'event_id': event['id'], 'error': str(error)})
 
+    pg_conn.commit()
+
     sentry_sdk.capture_exception(error)
 
 
@@ -111,6 +113,7 @@ def cleanup_events(pg_conn):
         WHERE state = 'completed'
         AND (now() - created) > interval '90 days'
     '''))
+    pg_conn.commit()
     if pg_cur.rowcount:
         logging.info(
             'Deleted ' + str(pg_cur.rowcount) + ' event' +
@@ -161,6 +164,7 @@ def run_event_handler(pg_conn, event, handler):
             SET state = 'completed'
             WHERE id = %(event_id)s
         '''), {'event_id': event['id']})
+        pg_conn.commit()
 
 
 def indexer(
@@ -219,6 +223,12 @@ def indexer(
             # boolean operator precedence.  -- mwiencek
             raise Exception('Event is not queued: %r', event)
 
+        # XXX: This is used by tests/test_concurrency.sh to check
+        # that concurrent indexer processes don't select the same
+        # queued events. A small delay is added before we mark them
+        # as `running`.
+        time.sleep(0.25)
+
         logging.info('Processing event %s', event)
 
         pg_conn.execute(dedent('''
@@ -227,6 +237,8 @@ def indexer(
                 attempts = attempts + 1
             WHERE id = %(event_id)s
         '''), {'event_id': event['id']})
+
+        pg_conn.commit()
 
         handler = event_handler_map[event['entity_type']]
 
@@ -253,6 +265,11 @@ def main():
                             dest='maxwait',
                             type=int,
                             default=32)
+    arg_parser.add_argument('--max-idle-loops',
+                            help='exit after this many idle loops',
+                            dest='max_idle_loops',
+                            type=int,
+                            default=inf)
     args = arg_parser.parse_args()
 
     logger = logging.getLogger()
@@ -272,7 +289,7 @@ def main():
         if sentry_dsn:
             sentry_sdk.init(dsn=sentry_dsn)
 
-    indexer(config, args.maxwait)
+    indexer(config, args.maxwait, max_idle_loops=args.max_idle_loops)
 
 
 if __name__ == '__main__':

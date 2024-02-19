@@ -33,7 +33,6 @@ class PgConnWrapper(object):
         conninfo = psycopg.conninfo.make_conninfo(**self.config['database'])
         self.conn = psycopg.connect(
             conninfo,
-            autocommit=True,
             prepare_threshold=None,
             row_factory=psycopg.rows.dict_row
         )
@@ -57,6 +56,11 @@ class PgConnWrapper(object):
                     'Command failed. Retrying in 30s: ' +
                     f'execute({execute_args})')
                 time.sleep(30)
+
+    def commit(self):
+        if self.conn is None or self.conn.closed:
+            raise Exception('Commit called with no open connection.')
+        return self.conn.commit()
 
     def close(self):
         if self.conn and not self.conn.closed:
