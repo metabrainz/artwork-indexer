@@ -1,10 +1,7 @@
 import configparser
-import io
 import json
 import psycopg
-import requests
 import unittest
-from urllib.parse import urlparse
 from textwrap import dedent
 
 
@@ -13,7 +10,6 @@ tests_config.read('config.tests.ini')
 
 
 MBS_TEST_URL = tests_config['musicbrainz']['url']
-MBS_TEST_NETLOC = urlparse(MBS_TEST_URL).netloc
 
 
 def image_copy_put(
@@ -119,12 +115,14 @@ def record_items(rec):
 
 class MockResponse():
 
-    def __init__(self, status=200, text=''):
+    def __init__(self, status=200, content=''):
         self.status = status
-        self.raw = io.StringIO(text)
+        if isinstance(content, str):
+            content = content.encode('utf-8')
+        self.content = content
 
     def raise_for_status(self):
-        if self.status != 200:
+        if self.status < 200 or self.status >= 300:
             raise Exception('Error: HTTP ' + str(self.status))
 
 
@@ -133,16 +131,13 @@ class MockClientSession():
     def __init__(self):
         self.last_requests = []
         self.next_responses = []
-        self.session = requests.Session()
-        self.headers = self.session.headers
+        self.headers = {}
 
     def _get_next_response(self):
-        if self.next_responses:
-            resp = self.next_responses.pop(0)
-            if resp.status != 200:
-                raise Exception('HTTP %d' % resp.status)
-            return resp
-        return MockResponse()
+        resp = self.next_responses.pop(0)
+        if resp.status < 200 or resp.status >= 300:
+            raise Exception('HTTP %d' % resp.status)
+        return resp
 
     def get(self, url, headers=None, **kwargs):
         self.last_requests.append({
@@ -151,9 +146,6 @@ class MockClientSession():
             'headers': headers,
             'data': None
         })
-        netloc = urlparse(url).netloc
-        if netloc == MBS_TEST_NETLOC:
-            return self.session.get(url, headers=headers)
         return self._get_next_response()
 
     def put(self, url, headers=None, data=None):
@@ -175,15 +167,12 @@ class MockClientSession():
         return self._get_next_response()
 
     def close(self):
-        self.session.close()
+        pass
 
 
 class TestArtArchive(unittest.TestCase):
 
     def setUp(self):
-        self.last_requests = []
-        self.next_responses = []
-
         self.pg_conn = psycopg.connect(
             psycopg.conninfo.make_conninfo(**tests_config['database']),
             autocommit=True,

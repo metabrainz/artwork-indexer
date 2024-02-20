@@ -159,11 +159,20 @@ class TestCoverArtArchive(TestArtArchive):
                               images_json=None,
                               xml_fmt_args_base=None,
                               xml_fmt_args=None):
-        self.session.last_requests = []
-
         self.assertEqual(self.get_event_queue(), [
             release_index_event(release_mbid, id=event_id),
         ])
+
+        xml = RELEASE_XML_TEMPLATE.format(
+            **(xml_fmt_args_base | (xml_fmt_args or {}))
+        )
+
+        self.session.last_requests = []
+        self.session.next_responses = [
+            MockResponse(),
+            MockResponse(status=200, content=xml),
+            MockResponse(status=200, content=xml),
+        ]
 
         indexer.indexer(tests_config, 1,
                         max_idle_loops=1,
@@ -172,12 +181,7 @@ class TestCoverArtArchive(TestArtArchive):
         self.assertEqual(self.session.last_requests, [
             release_index_json_put(release_mbid, images_json),
             release_mb_metadata_xml_get(release_mbid),
-            release_mb_metadata_xml_put(
-                release_mbid,
-                RELEASE_XML_TEMPLATE.format(
-                    **(xml_fmt_args_base | (xml_fmt_args or {}))
-                )
-            ),
+            release_mb_metadata_xml_put(release_mbid, xml),
         ])
 
     def _release1_reindex_test(self,
@@ -259,8 +263,6 @@ class TestCoverArtArchive(TestArtArchive):
                 WHERE id = 1
         '''))
 
-        self.session.last_requests = []
-
         self.assertEqual(self.get_event_queue(), [
             {
                 'id': 1,
@@ -277,6 +279,26 @@ class TestCoverArtArchive(TestArtArchive):
             },
             release_index_event(RELEASE1_MBID, id=2, depends_on=[1]),
         ])
+
+        xml = RELEASE_XML_TEMPLATE.format(
+            **(
+                RELEASE1_XML_FMT_ARGS |
+                {
+                    'has_artwork': 'false',
+                    'is_front': 'false',
+                    'is_back': 'false',
+                    'caa_count': '0'
+                }
+            )
+        )
+
+        self.session.last_requests = []
+        self.session.next_responses = [
+            MockResponse(status=204),
+            MockResponse(),
+            MockResponse(status=200, content=xml),
+            MockResponse(status=200, content=xml),
+        ]
 
         indexer.indexer(tests_config, 1,
                         max_idle_loops=1,
@@ -296,20 +318,7 @@ class TestCoverArtArchive(TestArtArchive):
             },
             release_index_json_put(RELEASE1_MBID, []),
             release_mb_metadata_xml_get(RELEASE1_MBID),
-            release_mb_metadata_xml_put(
-                RELEASE1_MBID,
-                RELEASE_XML_TEMPLATE.format(
-                    **(
-                        RELEASE1_XML_FMT_ARGS |
-                        {
-                            'has_artwork': 'false',
-                            'is_front': 'false',
-                            'is_back': 'false',
-                            'caa_count': '0'
-                        }
-                    )
-                )
-            ),
+            release_mb_metadata_xml_put(RELEASE1_MBID, xml),
         ])
 
     def test_deleting_release(self):
@@ -406,7 +415,11 @@ class TestCoverArtArchive(TestArtArchive):
         # Make the copy fail. This should halt processing of all dependant
         # events (delete_image, index).
         print('note, the following test is expected to log an HTTP 400 error')
-        self.session.next_responses.append(MockResponse(status=400))
+        self.session.last_requests = []
+        self.session.next_responses = [
+            MockResponse(status=400),
+            MockResponse(status=204),
+        ]
 
         self.pg_conn.execute(dedent('''
             UPDATE artwork_indexer.event_queue
@@ -414,7 +427,6 @@ class TestCoverArtArchive(TestArtArchive):
             WHERE action = 'copy_image'
         '''))
 
-        self.session.last_requests = []
         indexer.indexer(tests_config, 1,
                         max_idle_loops=1,
                         http_client_cls=self.http_client_cls)
@@ -482,7 +494,33 @@ class TestCoverArtArchive(TestArtArchive):
             WHERE action = 'copy_image'
         '''))
 
+        xml = RELEASE_XML_TEMPLATE.format(
+           **(
+                RELEASE2_XML_FMT_ARGS |
+                {
+                    'is_front': 'true',
+                    'release_event_xml': (
+                        '<date>1989-10</date>'
+                        '<country>US</country>'
+                        '<release-event-list count="1">'
+                            '<release-event>'
+                                '<date>1989-10</date>'
+                                f'{US_AREA_XML}'
+                            '</release-event>'
+                        '</release-event-list>'
+                    )
+                }
+            )
+        )
+
         self.session.last_requests = []
+        self.session.next_responses = [
+            MockResponse(),
+            MockResponse(status=204),
+            MockResponse(),
+            MockResponse(status=200, content=xml),
+            MockResponse(status=200, content=xml),
+        ]
 
         indexer.indexer(tests_config, 1,
                         max_idle_loops=1,
@@ -503,27 +541,7 @@ class TestCoverArtArchive(TestArtArchive):
             },
             release_index_json_put(RELEASE2_MBID, [new_image1_json]),
             release_mb_metadata_xml_get(RELEASE2_MBID),
-            release_mb_metadata_xml_put(
-                RELEASE2_MBID,
-                RELEASE_XML_TEMPLATE.format(
-                   **(
-                        RELEASE2_XML_FMT_ARGS |
-                        {
-                            'is_front': 'true',
-                            'release_event_xml': (
-                                '<date>1989-10</date>'
-                                '<country>US</country>'
-                                '<release-event-list count="1">'
-                                    '<release-event>'
-                                        '<date>1989-10</date>'
-                                        f'{US_AREA_XML}'
-                                    '</release-event>'
-                                '</release-event-list>'
-                            )
-                        }
-                    )
-                )
-            ),
+            release_mb_metadata_xml_put(RELEASE2_MBID, xml),
         ])
 
     def test_inserting_cover_art_type(self):

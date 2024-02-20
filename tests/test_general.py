@@ -3,6 +3,7 @@ import unittest
 from textwrap import dedent
 import indexer
 from . import (
+    MockResponse,
     TestArtArchive,
     index_event,
     tests_config,
@@ -47,6 +48,12 @@ class TestGeneral(TestArtArchive):
         self.pg_conn.execute(dedent('''
             UPDATE release SET name = 'updated name1' WHERE id = 1;
         '''))
+
+        self.session.next_responses = [
+            MockResponse(),
+            MockResponse(),
+            MockResponse(),
+        ]
 
         indexer.indexer(tests_config, 1,
                         max_idle_loops=1,

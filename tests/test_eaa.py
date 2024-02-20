@@ -119,11 +119,20 @@ class TestEventArtArchive(TestArtArchive):
                             images_json=None,
                             xml_fmt_args_base=None,
                             xml_fmt_args=None):
-        self.session.last_requests = []
-
         self.assertEqual(self.get_event_queue(), [
             event_index_event(event_mbid, id=event_id),
         ])
+
+        xml = EVENT_XML_TEMPLATE.format(
+            **(xml_fmt_args_base | (xml_fmt_args or {}))
+        )
+
+        self.session.last_requests = []
+        self.session.next_responses = [
+            MockResponse(),
+            MockResponse(status=200, content=xml),
+            MockResponse(status=200, content=xml),
+        ]
 
         indexer.indexer(tests_config, 1,
                         max_idle_loops=1,
@@ -132,12 +141,7 @@ class TestEventArtArchive(TestArtArchive):
         self.assertEqual(self.session.last_requests, [
             event_index_json_put(event_mbid, images_json),
             event_mb_metadata_xml_get(event_mbid),
-            event_mb_metadata_xml_put(
-                event_mbid,
-                EVENT_XML_TEMPLATE.format(
-                    **(xml_fmt_args_base | (xml_fmt_args or {}))
-                )
-            ),
+            event_mb_metadata_xml_put(event_mbid, xml),
         ])
 
     def _event1_reindex_test(self,
@@ -209,8 +213,6 @@ class TestEventArtArchive(TestArtArchive):
                 WHERE id = 1
         '''))
 
-        self.session.last_requests = []
-
         self.assertEqual(self.get_event_queue(), [
             {
                 'id': 1,
@@ -227,6 +229,14 @@ class TestEventArtArchive(TestArtArchive):
             },
             event_index_event(EVENT1_MBID, id=2, depends_on=[1]),
         ])
+
+        self.session.last_requests = []
+        self.session.next_responses = [
+            MockResponse(status=204),
+            MockResponse(),
+            MockResponse(status=200, content=EVENT1_XML),
+            MockResponse(status=200, content=EVENT1_XML),
+        ]
 
         indexer.indexer(tests_config, 1,
                         max_idle_loops=1,
@@ -318,15 +328,17 @@ class TestEventArtArchive(TestArtArchive):
         # Make the copy fail. This should halt processing of all dependant
         # events (delete_image, index).
         print('note, the following test is expected to log an HTTP 400 error')
-        self.session.next_responses.append(MockResponse(status=400))
+        self.session.last_requests = []
+        self.session.next_responses = [
+            MockResponse(status=400),
+            MockResponse(status=204),
+        ]
 
         self.pg_conn.execute(dedent('''
             UPDATE artwork_indexer.event_queue
             SET attempts = 4, last_updated = (now() - interval '1 day')
             WHERE action = 'copy_image'
         '''))
-
-        self.session.last_requests = []
 
         indexer.indexer(tests_config, 1,
                         max_idle_loops=1,
@@ -395,6 +407,13 @@ class TestEventArtArchive(TestArtArchive):
         '''))
 
         self.session.last_requests = []
+        self.session.next_responses = [
+            MockResponse(),
+            MockResponse(status=204),
+            MockResponse(),
+            MockResponse(status=200, content=EVENT2_XML),
+            MockResponse(status=200, content=EVENT2_XML),
+        ]
 
         indexer.indexer(tests_config, 1,
                         max_idle_loops=1,
