@@ -18,8 +18,10 @@
 
 import logging
 import json
-import urllib.parse
+
+from psycopg import sql
 from textwrap import dedent
+import urllib.parse
 
 
 IMAGE_FILE_FORMAT = '{bucket}-{id}.{suffix}'
@@ -352,11 +354,14 @@ class MusicBrainzEventHandler(EventHandler):
         # Note: cover_art_archive.image_type is also used by the
         # event_art_archive schema.
         return pg_conn.execute(
-            dedent('''
+            sql.SQL(dedent('''
                 SELECT * FROM {schema}.index_listing
                 JOIN cover_art_archive.image_type USING (mime_type)
                 WHERE {entity} = (SELECT id FROM {entity} WHERE gid = %(gid)s)
                 ORDER BY ordering
-            '''.format(schema=schema, entity=entity_type)),
+            ''')).format(
+                schema=sql.Identifier(schema),
+                entity=sql.Identifier(entity_type),
+            ),
             {'gid': mbid},
         ).fetchall()
