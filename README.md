@@ -110,6 +110,16 @@ The triggers push indexer events to the `artwork_indexer.event_queue` table.
 the appropriate handlers for them (see [handlers.py](handlers.py) and
 [handlers_base.py](handlers_base.py)).
 
+Event types and their expected `message` format are documented below.
+
+| event type    | message format                                                          | description                                                             |
+| ------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| index         | `{"gid": UUID}`                                                         | uploads index.json and MB metadata to the IA                            |
+| copy_image    | `{"artwork_id": INT, "old_gid": UUID, "new_gid": UUID, "suffix": TEXT}` | copies an image from one bucket to another (after a release is merged)  |
+| delete_image  | `{"gid": UUID}`                                                         | deletes an image (after a release is merged or deleted)                 |
+| deindex       | `{"gid": UUID}`                                                         | deletes index.json (after a release is deleted)                         |
+| noop          | `{}` or `{"fail": BOOL}`                                                | for debugging (does nothing, or fails if `{"fail": true}` is specified) |
+
 Failed events (any that encounter an exception during their execution) are
 tried up to 5 times; only after all attempts have been exhausted is an
 event's `state` set to `failed`. Failed events are never cleaned up and must
