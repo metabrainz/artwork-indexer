@@ -42,6 +42,10 @@ class PgConnWrapper(object):
             self.connect()
         return self.conn.execute(query, params)
 
+    def execute_and_commit(self, query, params=None):
+        self.execute(query, params)
+        self.commit()
+
     def execute_with_retry(self, query, params=None):
         while True:
             try:

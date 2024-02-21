@@ -133,7 +133,7 @@ class TestCoverArtArchive(TestArtArchive):
             os.path.join(os.path.dirname(__file__), 'caa_setup.sql'),
             'r'
         ) as fp:
-            self.pg_conn.execute(fp.read())
+            self.pg_conn.execute_and_commit(fp.read())
 
         self._orig_image1_json = {
             'approved': False,
@@ -150,7 +150,7 @@ class TestCoverArtArchive(TestArtArchive):
             os.path.join(os.path.dirname(__file__), 'caa_teardown.sql'),
             'r'
         ) as fp:
-            self.pg_conn.execute(fp.read())
+            self.pg_conn.execute_and_commit(fp.read())
         super().tearDown()
 
     def _release_reindex_test(self,
@@ -174,7 +174,7 @@ class TestCoverArtArchive(TestArtArchive):
             MockResponse(status=200, content=xml),
         ]
 
-        indexer.indexer(tests_config, 1,
+        indexer.indexer(tests_config, self.pg_conn, 1,
                         max_idle_loops=1,
                         http_client_cls=self.http_client_cls)
 
@@ -209,7 +209,7 @@ class TestCoverArtArchive(TestArtArchive):
         )
 
     def test_inserting_cover_art(self):
-        self.pg_conn.execute(dedent('''
+        self.pg_conn.execute_and_commit(dedent('''
             INSERT INTO musicbrainz.edit
                     (id, editor, type, status, expire_time)
                 VALUES (3, 10, 314, 2, now());
@@ -242,7 +242,7 @@ class TestCoverArtArchive(TestArtArchive):
     def test_updating_cover_art(self):
         # artwork_indexer_a_upd_cover_art
 
-        self.pg_conn.execute(dedent('''
+        self.pg_conn.execute_and_commit(dedent('''
             UPDATE cover_art_archive.cover_art
                 SET ordering = 3, comment = ''
                 WHERE id = 1
@@ -258,7 +258,7 @@ class TestCoverArtArchive(TestArtArchive):
     def test_deleting_cover_art(self):
         # artwork_indexer_a_del_cover_art
 
-        self.pg_conn.execute(dedent('''
+        self.pg_conn.execute_and_commit(dedent('''
             DELETE FROM cover_art_archive.cover_art
                 WHERE id = 1
         '''))
@@ -300,7 +300,7 @@ class TestCoverArtArchive(TestArtArchive):
             MockResponse(status=200, content=xml),
         ]
 
-        indexer.indexer(tests_config, 1,
+        indexer.indexer(tests_config, self.pg_conn, 1,
                         max_idle_loops=1,
                         http_client_cls=self.http_client_cls)
 
@@ -327,7 +327,7 @@ class TestCoverArtArchive(TestArtArchive):
         # Queue an index event (via artwork_indexer_a_upd_cover_art).
         # We're checking that it's replaced by the following release
         # deletion event.
-        self.pg_conn.execute(dedent('''
+        self.pg_conn.execute_and_commit(dedent('''
             UPDATE cover_art_archive.cover_art
                 SET ordering = 3, comment = ''
                 WHERE id = 1
@@ -341,7 +341,7 @@ class TestCoverArtArchive(TestArtArchive):
 
         # This simulates a merge, where the cover art is first copied to
         # another release, and the original release is deleted.
-        self.pg_conn.execute(dedent('''
+        self.pg_conn.execute_and_commit(dedent('''
             UPDATE cover_art_archive.cover_art
                 SET release = 2
                 WHERE id = 1;
@@ -421,13 +421,13 @@ class TestCoverArtArchive(TestArtArchive):
             MockResponse(status=204),
         ]
 
-        self.pg_conn.execute(dedent('''
+        self.pg_conn.execute_and_commit(dedent('''
             UPDATE artwork_indexer.event_queue
             SET attempts = 4, last_updated = (now() - interval '1 day')
             WHERE action = 'copy_image'
         '''))
 
-        indexer.indexer(tests_config, 1,
+        indexer.indexer(tests_config, self.pg_conn, 1,
                         max_idle_loops=1,
                         http_client_cls=self.http_client_cls)
 
@@ -488,7 +488,7 @@ class TestCoverArtArchive(TestArtArchive):
 
         # Revert the artificial failure we created, which should unblock
         # processing of the failed event and its dependants.
-        self.pg_conn.execute(dedent('''
+        self.pg_conn.execute_and_commit(dedent('''
             UPDATE artwork_indexer.event_queue
             SET attempts = 0, state = 'queued'
             WHERE action = 'copy_image'
@@ -522,7 +522,7 @@ class TestCoverArtArchive(TestArtArchive):
             MockResponse(status=200, content=xml),
         ]
 
-        indexer.indexer(tests_config, 1,
+        indexer.indexer(tests_config, self.pg_conn, 1,
                         max_idle_loops=1,
                         http_client_cls=self.http_client_cls)
 
@@ -547,7 +547,7 @@ class TestCoverArtArchive(TestArtArchive):
     def test_inserting_cover_art_type(self):
         # artwork_indexer_a_ins_cover_art_type
 
-        self.pg_conn.execute(dedent('''
+        self.pg_conn.execute_and_commit(dedent('''
             INSERT INTO cover_art_archive.cover_art_type (id, type_id)
                 VALUES (1, 2);
         '''))
@@ -566,7 +566,7 @@ class TestCoverArtArchive(TestArtArchive):
     def test_deleting_cover_art_type(self):
         # artwork_indexer_a_del_cover_art_type
 
-        self.pg_conn.execute(dedent('''
+        self.pg_conn.execute_and_commit(dedent('''
             DELETE FROM cover_art_archive.cover_art_type
                 WHERE id = 1 AND type_id = 1
         '''))
@@ -583,7 +583,7 @@ class TestCoverArtArchive(TestArtArchive):
     def test_updating_artist(self):
         # artwork_indexer_a_upd_artist
 
-        self.pg_conn.execute(dedent('''
+        self.pg_conn.execute_and_commit(dedent('''
             UPDATE artist SET name = 'foo', sort_name = 'bar' WHERE id = 1;
         '''))
 
@@ -599,7 +599,7 @@ class TestCoverArtArchive(TestArtArchive):
     def test_updating_release(self):
         # artwork_indexer_a_upd_release
 
-        self.pg_conn.execute(dedent('''
+        self.pg_conn.execute_and_commit(dedent('''
             UPDATE release SET name = 'updated name1' WHERE id = 1;
 
             -- Should not produce any update, as there is no cover art
@@ -618,7 +618,7 @@ class TestCoverArtArchive(TestArtArchive):
     def test_updating_release_meta(self):
         # artwork_indexer_a_upd_release_meta
 
-        self.pg_conn.execute(dedent('''
+        self.pg_conn.execute_and_commit(dedent('''
             UPDATE release_meta SET amazon_asin = 'FOOBAR123' WHERE id = 1;
 
             -- Should not produce any update, as there is no cover art
@@ -637,7 +637,7 @@ class TestCoverArtArchive(TestArtArchive):
     def test_inserting_first_release_date(self):
         # artwork_indexer_a_ins_release_first_release_date
 
-        self.pg_conn.execute(dedent('''
+        self.pg_conn.execute_and_commit(dedent('''
             INSERT INTO release_unknown_country VALUES (1, 1980, 1, 1);
 
             -- Should not produce any update, as there is no cover art
@@ -667,7 +667,7 @@ class TestCoverArtArchive(TestArtArchive):
     def test_deleting_first_release_date(self):
         # artwork_indexer_a_del_release_first_release_date
 
-        self.pg_conn.execute(dedent('''
+        self.pg_conn.execute_and_commit(dedent('''
             DELETE FROM release_country WHERE release = 1;
 
             -- Should not produce any update, as there is no cover art

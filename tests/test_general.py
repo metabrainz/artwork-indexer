@@ -22,18 +22,18 @@ class TestGeneral(TestArtArchive):
             os.path.join(os.path.dirname(__file__), 'caa_setup.sql'),
             'r'
         ) as fp:
-            self.pg_conn.execute(fp.read())
+            self.pg_conn.execute_and_commit(fp.read())
 
     def tearDown(self):
         with open(
             os.path.join(os.path.dirname(__file__), 'caa_teardown.sql'),
             'r'
         ) as fp:
-            self.pg_conn.execute(fp.read())
+            self.pg_conn.execute_and_commit(fp.read())
         super().tearDown()
 
     def test_duplicate_updates(self):
-        self.pg_conn.execute(dedent('''
+        self.pg_conn.execute_and_commit(dedent('''
             UPDATE musicbrainz.release SET name = 'update' WHERE id = 1;
             UPDATE cover_art_archive.cover_art SET comment = 'a' WHERE id = 1;
             UPDATE cover_art_archive.cover_art SET comment = 'b' WHERE id = 1;
@@ -45,7 +45,7 @@ class TestGeneral(TestArtArchive):
         ])
 
     def test_cleanup(self):
-        self.pg_conn.execute(dedent('''
+        self.pg_conn.execute_and_commit(dedent('''
             UPDATE release SET name = 'updated name1' WHERE id = 1;
         '''))
 
@@ -55,7 +55,7 @@ class TestGeneral(TestArtArchive):
             MockResponse(),
         ]
 
-        indexer.indexer(tests_config, 1,
+        indexer.indexer(tests_config, self.pg_conn, 1,
                         max_idle_loops=1,
                         http_client_cls=self.http_client_cls)
 
@@ -64,12 +64,12 @@ class TestGeneral(TestArtArchive):
         ''')).fetchone()['count']
         self.assertEqual(event_count, 1)
 
-        self.pg_conn.execute(dedent('''
+        self.pg_conn.execute_and_commit(dedent('''
             UPDATE artwork_indexer.event_queue
             SET created = (created - interval '90 days');
         '''))
 
-        indexer.indexer(tests_config, 2,
+        indexer.indexer(tests_config, self.pg_conn, 2,
                         max_idle_loops=2,
                         http_client_cls=self.http_client_cls)
 
@@ -79,7 +79,7 @@ class TestGeneral(TestArtArchive):
         self.assertEqual(event_count, 0)
 
     def test_depends_on(self):
-        self.pg_conn.execute(dedent('''
+        self.pg_conn.execute_and_commit(dedent('''
             INSERT INTO artwork_indexer.event_queue
                     (id, state, entity_type, action, depends_on, message,
                      created)
@@ -96,7 +96,7 @@ class TestGeneral(TestArtArchive):
         self.assertEqual(next_event['id'], 1)
 
     def test_failure(self):
-        self.pg_conn.execute(dedent('''
+        self.pg_conn.execute_and_commit(dedent('''
             INSERT INTO artwork_indexer.event_queue
                     (id, entity_type, action, message, created)
                  VALUES (1, 'release', 'noop', '{"fail": true}',
@@ -104,14 +104,14 @@ class TestGeneral(TestArtArchive):
         '''))
 
         for index in range(0, indexer.MAX_ATTEMPTS):
-            self.pg_conn.execute(dedent('''
+            self.pg_conn.execute_and_commit(dedent('''
                 UPDATE artwork_indexer.event_queue
                    SET last_updated =
                         (NOW() - (interval '30 minutes' * 2 * attempts))
                  WHERE id = 1;
             '''))
 
-            indexer.indexer(tests_config, 1,
+            indexer.indexer(tests_config, self.pg_conn, 1,
                             max_idle_loops=1,
                             http_client_cls=self.http_client_cls)
 

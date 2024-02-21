@@ -1,8 +1,9 @@
 import configparser
 import json
-import psycopg
 import unittest
 from textwrap import dedent
+
+from pg_conn_wrapper import PgConnWrapper
 
 
 tests_config = configparser.ConfigParser()
@@ -173,13 +174,7 @@ class MockClientSession():
 class TestArtArchive(unittest.TestCase):
 
     def setUp(self):
-        self.pg_conn = psycopg.connect(
-            psycopg.conninfo.make_conninfo(**tests_config['database']),
-            autocommit=True,
-            prepare_threshold=None,
-            row_factory=psycopg.rows.dict_row,
-        )
-
+        self.pg_conn = PgConnWrapper(tests_config)
         self.session = MockClientSession()
         self.http_client_cls = lambda: self.session
 

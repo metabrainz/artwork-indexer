@@ -86,7 +86,7 @@ class TestEventArtArchive(TestArtArchive):
             os.path.join(os.path.dirname(__file__), 'eaa_setup.sql'),
             'r'
         ) as fp:
-            self.pg_conn.execute(fp.read())
+            self.pg_conn.execute_and_commit(fp.read())
 
         self._orig_image1_json = {
             'approved': False,
@@ -110,7 +110,7 @@ class TestEventArtArchive(TestArtArchive):
             os.path.join(os.path.dirname(__file__), 'eaa_teardown.sql'),
             'r'
         ) as fp:
-            self.pg_conn.execute(fp.read())
+            self.pg_conn.execute_and_commit(fp.read())
         super().tearDown()
 
     def _event_reindex_test(self,
@@ -134,7 +134,7 @@ class TestEventArtArchive(TestArtArchive):
             MockResponse(status=200, content=xml),
         ]
 
-        indexer.indexer(tests_config, 1,
+        indexer.indexer(tests_config, self.pg_conn, 1,
                         max_idle_loops=1,
                         http_client_cls=self.http_client_cls)
 
@@ -159,7 +159,7 @@ class TestEventArtArchive(TestArtArchive):
     def test_inserting_event_art(self):
         # artwork_indexer_a_ins_event_art
 
-        self.pg_conn.execute(dedent('''
+        self.pg_conn.execute_and_commit(dedent('''
             INSERT INTO musicbrainz.edit
                     (id, editor, type, status, expire_time)
                 VALUES (3, 10, 158, 2, now());
@@ -192,7 +192,7 @@ class TestEventArtArchive(TestArtArchive):
     def test_updating_event_art(self):
         # artwork_indexer_a_upd_event_art
 
-        self.pg_conn.execute(dedent('''
+        self.pg_conn.execute_and_commit(dedent('''
             UPDATE event_art_archive.event_art
                 SET ordering = 3, comment = ''
                 WHERE id = 1
@@ -208,7 +208,7 @@ class TestEventArtArchive(TestArtArchive):
     def test_deleting_event_art(self):
         # artwork_indexer_a_del_event_art
 
-        self.pg_conn.execute(dedent('''
+        self.pg_conn.execute_and_commit(dedent('''
             DELETE FROM event_art_archive.event_art
                 WHERE id = 1
         '''))
@@ -238,7 +238,7 @@ class TestEventArtArchive(TestArtArchive):
             MockResponse(status=200, content=EVENT1_XML),
         ]
 
-        indexer.indexer(tests_config, 1,
+        indexer.indexer(tests_config, self.pg_conn, 1,
                         max_idle_loops=1,
                         http_client_cls=self.http_client_cls)
 
@@ -265,7 +265,7 @@ class TestEventArtArchive(TestArtArchive):
         # Queue an index event (via artwork_indexer_a_upd_event_art).
         # We're checking that it's replaced by the following event
         # (entity) deletion event.
-        self.pg_conn.execute(dedent('''
+        self.pg_conn.execute_and_commit(dedent('''
             UPDATE event_art_archive.event_art
                 SET ordering = 3, comment = ''
                 WHERE id = 1
@@ -279,7 +279,7 @@ class TestEventArtArchive(TestArtArchive):
 
         # This simulates a merge, where the cover art is first copied to
         # another release, and the original release is deleted.
-        self.pg_conn.execute(dedent('''
+        self.pg_conn.execute_and_commit(dedent('''
             UPDATE event_art_archive.event_art SET event = 2 WHERE id = 1;
             UPDATE event_meta SET event_art_presence = 'present' WHERE id = 2;
             DELETE FROM event WHERE id = 1;
@@ -334,13 +334,13 @@ class TestEventArtArchive(TestArtArchive):
             MockResponse(status=204),
         ]
 
-        self.pg_conn.execute(dedent('''
+        self.pg_conn.execute_and_commit(dedent('''
             UPDATE artwork_indexer.event_queue
             SET attempts = 4, last_updated = (now() - interval '1 day')
             WHERE action = 'copy_image'
         '''))
 
-        indexer.indexer(tests_config, 1,
+        indexer.indexer(tests_config, self.pg_conn, 1,
                         max_idle_loops=1,
                         http_client_cls=self.http_client_cls)
 
@@ -400,7 +400,7 @@ class TestEventArtArchive(TestArtArchive):
 
         # Revert the artificial failure we created, which should unblock
         # processing of the failed event and its dependants.
-        self.pg_conn.execute(dedent('''
+        self.pg_conn.execute_and_commit(dedent('''
             UPDATE artwork_indexer.event_queue
             SET attempts = 0, state = 'queued'
             WHERE action = 'copy_image'
@@ -415,7 +415,7 @@ class TestEventArtArchive(TestArtArchive):
             MockResponse(status=200, content=EVENT2_XML),
         ]
 
-        indexer.indexer(tests_config, 1,
+        indexer.indexer(tests_config, self.pg_conn, 1,
                         max_idle_loops=1,
                         http_client_cls=self.http_client_cls)
 
@@ -443,7 +443,7 @@ class TestEventArtArchive(TestArtArchive):
     def test_inserting_event_art_type(self):
         # artwork_indexer_a_ins_event_art_type
 
-        self.pg_conn.execute(dedent('''
+        self.pg_conn.execute_and_commit(dedent('''
             INSERT INTO event_art_archive.event_art_type (id, type_id)
                 VALUES (2, 1);
         '''))
@@ -463,7 +463,7 @@ class TestEventArtArchive(TestArtArchive):
     def test_deleting_event_art_type(self):
         # artwork_indexer_a_del_event_art_type
 
-        self.pg_conn.execute(dedent('''
+        self.pg_conn.execute_and_commit(dedent('''
             DELETE FROM event_art_archive.event_art_type
                 WHERE id = 1 AND type_id = 1
         '''))
