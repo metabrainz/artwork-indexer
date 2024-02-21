@@ -39,7 +39,14 @@ project for more details.
 
   3. Copy `config.default.ini` to `config.ini` and edit appropriately.
 
-  4. Run `indexer.py`:
+  4. Install the `artwork_indexer` schema, plus associated functions and
+     triggers. (This will use the database configured in `config.ini`.)
+
+       ```sh
+       python indexer.py --setup-schema
+       ```
+
+  5. Run `indexer.py`:
        ```sh
        python indexer.py
        ```

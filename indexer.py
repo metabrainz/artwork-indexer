@@ -19,7 +19,9 @@
 import argparse
 import configparser
 import logging
+import os
 import signal
+import sys
 import time
 import traceback
 from math import inf
@@ -169,13 +171,12 @@ def run_event_handler(pg_conn, event, handler):
 
 def indexer(
     config,
+    pg_conn,
     maxwait,
     max_idle_loops=inf,
     http_client_cls=requests.Session
 ):
     sleep_amount = 1  # seconds
-
-    pg_conn = PgConnWrapper(config)
 
     http_session = http_client_cls()
     http_session.headers.update({
@@ -251,6 +252,34 @@ def indexer(
     pg_conn.close()
 
 
+def setup_schema(pg_conn):
+    curdir = os.path.dirname(__file__)
+
+    schema_exists = pg_conn.execute(dedent('''
+        SELECT TRUE
+          FROM information_schema.schemata
+         WHERE schema_name = 'artwork_indexer';
+    ''')).fetchone()
+    if schema_exists:
+        logging.error(
+            'ERROR: The `artwork_indexer` schema already exists. ' +
+            'If you would like to recreate it, drop it first.',
+        )
+        sys.exit(1)
+
+    for file_name in (
+        'create_schema',
+        'caa_functions',
+        'eaa_functions',
+        'caa_triggers',
+        'eaa_triggers',
+    ):
+        with open(os.path.join(curdir, 'sql', file_name + '.sql')) as fp:
+            pg_conn.execute(fp.read())
+
+    pg_conn.commit()
+
+
 def main():
     arg_parser = argparse.ArgumentParser(
         description='update artwork index files at the Internet Archive',
@@ -270,18 +299,28 @@ def main():
                             dest='max_idle_loops',
                             type=int,
                             default=inf)
+    arg_parser.add_argument('--setup-schema',
+                            help='install the schema and exit',
+                            dest='setup_schema',
+                            action='store_true')
     args = arg_parser.parse_args()
 
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
 
     config = configparser.ConfigParser()
+    config.read(args.config)
+
+    pg_conn = PgConnWrapper(config)
+
+    if args.setup_schema:
+        setup_schema(pg_conn)
+        sys.exit(0)
 
     def reload_configuration(signum, frame):
         logging.info('Got SIGHUP, reloading configuration')
         config.read('config.ini')
 
-    config.read(args.config)
     signal.signal(signal.SIGHUP, reload_configuration)
 
     if 'sentry' in config:
@@ -289,7 +328,8 @@ def main():
         if sentry_dsn:
             sentry_sdk.init(dsn=sentry_dsn)
 
-    indexer(config, args.maxwait, max_idle_loops=args.max_idle_loops)
+    indexer(config, pg_conn, args.maxwait,
+            max_idle_loops=args.max_idle_loops)
 
 
 if __name__ == '__main__':

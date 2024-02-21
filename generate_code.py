@@ -179,10 +179,6 @@ for project in PROJECTS:
     functions_source = dedent(f'''\
         -- Automatically generated, do not edit.
 
-        \\set ON_ERROR_STOP 1
-
-        BEGIN;
-
         SET LOCAL search_path = {art_schema};
 
         CREATE OR REPLACE FUNCTION artwork_indexer_a_ins_{art_table}() RETURNS trigger AS $$
@@ -323,7 +319,6 @@ for project in PROJECTS:
         ''')
 
     functions_source += extra_functions_source + '\n'
-    functions_source += 'COMMIT;\n'
 
     functions_fpath = os.path.join(curdir, f'sql/{abbr}_functions.sql')
     with open(functions_fpath, 'w') as fp:
@@ -331,10 +326,6 @@ for project in PROJECTS:
 
     triggers_source = dedent(f'''\
         -- Automatically generated, do not edit.
-
-        \\set ON_ERROR_STOP 1
-
-        BEGIN;
 
         SET LOCAL search_path = '{art_schema}';
         SET LOCAL client_min_messages = warning;
@@ -380,7 +371,6 @@ for project in PROJECTS:
         ''')
 
     triggers_source += extra_triggers_source + '\n'
-    triggers_source += 'COMMIT;\n'
 
     triggers_fpath = os.path.join(curdir, f'sql/{abbr}_triggers.sql')
     with open(triggers_fpath, 'w') as fp:

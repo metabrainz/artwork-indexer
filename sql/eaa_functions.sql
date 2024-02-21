@@ -1,9 +1,5 @@
 -- Automatically generated, do not edit.
 
-\set ON_ERROR_STOP 1
-
-BEGIN;
-
 SET LOCAL search_path = event_art_archive;
 
 CREATE OR REPLACE FUNCTION artwork_indexer_a_ins_event_art() RETURNS trigger AS $$
@@ -161,4 +157,3 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-COMMIT;

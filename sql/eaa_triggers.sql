@@ -1,9 +1,5 @@
 -- Automatically generated, do not edit.
 
-\set ON_ERROR_STOP 1
-
-BEGIN;
-
 SET LOCAL search_path = 'event_art_archive';
 SET LOCAL client_min_messages = warning;
 
@@ -52,4 +48,3 @@ CREATE TRIGGER artwork_indexer_a_upd_event AFTER UPDATE
     ON musicbrainz.event FOR EACH ROW
     EXECUTE PROCEDURE event_art_archive.artwork_indexer_a_upd_event();
 
-COMMIT;

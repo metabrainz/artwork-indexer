@@ -1,7 +1,3 @@
-\set ON_ERROR_STOP 1
-
-BEGIN;
-
 CREATE SCHEMA artwork_indexer;
 
 SET search_path = artwork_indexer;
@@ -111,5 +107,3 @@ $$ LANGUAGE 'plpgsql';
 CREATE TRIGGER b_upd_event_queue
     BEFORE UPDATE ON event_queue
     FOR EACH ROW EXECUTE FUNCTION b_upd_event_queue();
-
-COMMIT;

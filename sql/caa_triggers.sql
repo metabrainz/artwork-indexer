@@ -1,9 +1,5 @@
 -- Automatically generated, do not edit.
 
-\set ON_ERROR_STOP 1
-
-BEGIN;
-
 SET LOCAL search_path = 'cover_art_archive';
 SET LOCAL client_min_messages = warning;
 
@@ -76,4 +72,3 @@ CREATE TRIGGER artwork_indexer_a_del_release_first_release_date AFTER DELETE
     ON musicbrainz.release_first_release_date FOR EACH ROW
     EXECUTE PROCEDURE cover_art_archive.artwork_indexer_a_del_release_first_release_date();
 
-COMMIT;
