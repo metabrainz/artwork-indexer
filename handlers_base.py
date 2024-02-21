@@ -16,6 +16,7 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
+import logging
 import json
 import urllib.parse
 from textwrap import dedent
@@ -111,17 +112,20 @@ class EventHandler:
         message = event['message']
         gid = message['gid']
 
-        encoded_index_json = json.dumps({
+        index_json_content = json.dumps({
             'images': [
                 self.build_image_json(gid, row)
                 for row in self.fetch_image_rows(pg_conn, gid)
             ],
             kebab(self.entity_type): self.build_canonical_entity_url(gid),
-        }, sort_keys=True).encode('utf-8')
+        }, sort_keys=True)
 
+        logging.debug('Produced %s', index_json_content)
+
+        index_json_upload_url = self.build_s3_item_url(gid, 'index.json')
         self.http_session.put(
-            self.build_s3_item_url(gid, 'index.json'),
-            data=encoded_index_json,
+            index_json_upload_url,
+            data=index_json_content.encode('utf-8'),
             headers={
                 **self.build_authorization_header(),
                 'content-type': 'application/json; charset=UTF-8',
@@ -133,17 +137,21 @@ class EventHandler:
             },
         ).raise_for_status()
 
+        logging.info('Upload of %s succeeded', index_json_upload_url)
+
         entity_metadata_url = self.build_metadata_url(gid)
         entity_metadata_headers = self.build_metadata_headers()
         metadata_res = self.http_session.get(entity_metadata_url,
                                              headers=entity_metadata_headers,
                                              stream=True)
         metadata_res.raise_for_status()
+
+        entity_metadata_upload_url = self.build_s3_item_url(
+            gid,
+            self.build_metadata_ia_filename(gid),
+        )
         self.http_session.put(
-            self.build_s3_item_url(
-                gid,
-                self.build_metadata_ia_filename(gid),
-            ),
+            entity_metadata_upload_url,
             data=metadata_res.content,
             headers={
                 **self.build_authorization_header(),
@@ -154,6 +162,8 @@ class EventHandler:
                 'x-archive-meta-noindex': 'true',
             },
         ).raise_for_status()
+
+        logging.info('Upload of %s succeeded', entity_metadata_upload_url)
 
     def copy_image(self, pg_conn, event):
         message = event['message']
@@ -179,10 +189,12 @@ class EventHandler:
             bucket=old_bucket,
             file=old_file_name,
         )
+        target_url = self.build_s3_item_url(new_gid, new_file_name)
 
-        # Copy the image to the new MBID, and delete the old image.
+        # Copy the image to the new MBID. (The old image will be deleted by a
+        # subsequent and dependant `delete_image` event.)
         self.http_session.put(
-            self.build_s3_item_url(new_gid, new_file_name),
+            target_url,
             headers={
                 **self.build_authorization_header(),
                 'x-amz-copy-source': source_file_path,
@@ -193,6 +205,9 @@ class EventHandler:
                 'x-archive-meta-noindex': 'true',
             },
         ).raise_for_status()
+
+        logging.info('Copy from %s to %s succeeded',
+                     source_file_path, target_url)
 
     def delete_image(self, pg_conn, event):
         message = event['message']
@@ -232,10 +247,12 @@ class EventHandler:
             id=message['artwork_id'],
             suffix=message['suffix']
         )
+        target_url = self.build_s3_item_url(gid, filename)
+
         # Note: This request should succeed (204) even if the file
         # no longer exists.
         self.http_session.delete(
-            self.build_s3_item_url(gid, filename),
+            target_url,
             headers={
                 **self.build_authorization_header(),
                 'x-archive-keep-old-version': '1',
@@ -243,18 +260,26 @@ class EventHandler:
             },
         ).raise_for_status()
 
+        logging.info('Deletion of %s succeeded', target_url)
+
     def deindex(self, pg_conn, event):
         message = event['message']
+        gid = message['gid']
+
+        target_url = self.build_s3_item_url(gid, 'index.json')
+
         # Note: This request should succeed (204) even if the file
         # no longer exists.
         self.http_session.delete(
-            self.build_s3_item_url(message['gid'], 'index.json'),
+            target_url,
             headers={
                 **self.build_authorization_header(),
                 'x-archive-keep-old-version': '1',
                 'x-archive-cascade-delete': '1',
             },
         ).raise_for_status()
+
+        logging.info('Deletion of %s succeeded', target_url)
 
     def noop(self, pg_conn, event):
         message = event['message']

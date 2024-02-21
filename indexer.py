@@ -273,7 +273,7 @@ def main():
     args = arg_parser.parse_args()
 
     logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG)
 
     config = configparser.ConfigParser()
 
