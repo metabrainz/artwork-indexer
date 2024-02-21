@@ -65,6 +65,21 @@ env DROPDB_COMMAND=dropdb \
     ./run_tests.sh
 ```
 
+## Maintenance
+
+### Reindexing an entity
+
+If the index.json for a particular entity is corrupted or out-of-date and needs to be regenerated, you can trigger an index event from psql:
+
+```sh
+$ ssh jimmy
+bitmap@jimmy:~$ docker exec -it postgres-jimmy psql -U musicbrainz musicbrainz_db
+musicbrainz_db=> INSERT INTO artwork_indexer.event_queue (entity_type, action, message)
+                      VALUES ('release', 'index',
+                              jsonb_build_object('gid', 'e02c28af-8f42-4ea4-928c-4c5244b7c10a'));
+INSERT 0 1
+```
+
 ## Hacking
 
 There are two primary tasks of the artwork-indexer:
