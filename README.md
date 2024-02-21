@@ -87,6 +87,22 @@ musicbrainz_db=> INSERT INTO artwork_indexer.event_queue (entity_type, action, m
 INSERT 0 1
 ```
 
+### Inspecting failures
+
+To retrieve all current failed events, run:
+
+```sh
+musicbrainz_db=> SELECT q.*, string_agg(fr.failure_reason, E'\n')
+                   FROM artwork_indexer.event_queue q
+                   JOIN artwork_indexer.event_failure_reason fr ON fr.event = q.id
+                  WHERE q.state = 'failed'
+               GROUP BY q.id
+               ORDER BY q.last_updated DESC;
+```
+
+These must be cleaned up by hand once they're no longer needed (i.e., after
+the underlying issue is determined and resolved).
+
 ## Hacking
 
 There are two primary tasks of the artwork-indexer:
