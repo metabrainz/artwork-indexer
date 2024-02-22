@@ -126,6 +126,29 @@ def cleanup_events(pg_conn):
             ('s' if pg_cur.rowcount > 1 else '') +
             ' older than 90 days')
 
+    # Additionally, mark events that have been running for more than
+    # 2.5 minutes as failed.
+    timed_out_events = pg_conn.execute(dedent('''
+        UPDATE artwork_indexer.event_queue
+        SET state = 'failed'
+        WHERE state = 'running'
+        AND (last_updated - created) > interval '2.5 minutes'
+        RETURNING id, (last_updated - created) AS duration
+    ''')).fetchall()
+    for event in timed_out_events:
+        seconds_elapsed = event['duration'].total_seconds()
+        pg_conn.execute(dedent('''
+            INSERT INTO artwork_indexer.event_failure_reason
+                (event, failure_reason)
+            VALUES (%(event_id)s, %(error)s)
+        '''), {
+            'event_id': event['id'],
+            'error': 'This event was marked as failed because ' +
+                     'it had been running for more than 2.5 minutes ' +
+                     f'({seconds_elapsed} seconds).'
+        })
+    pg_conn.commit()
+
 
 def get_next_event(pg_conn):
     # Skip events that have reached `MAX_ATTEMPTS`.

@@ -140,6 +140,34 @@ class TestGeneral(TestArtArchive):
         # Should not return the failed event.
         self.assertEqual(indexer.get_next_event(self.pg_conn), None)
 
+    def test_timeout(self):
+        self.pg_conn.execute_and_commit(dedent('''
+            INSERT INTO artwork_indexer.event_queue
+                    (id, state, entity_type, action, message, created)
+                 VALUES (1, 'running', 'release', 'index',
+                         '{"gid": "A"}', NOW() - interval '5 minutes');
+        '''))
+
+        indexer.indexer(tests_config, self.pg_conn, 1,
+                        max_idle_loops=1,
+                        http_client_cls=self.http_client_cls)
+
+        event = self.pg_conn.execute(dedent('''
+            SELECT eq.*,
+                   string_agg(efr.failure_reason, ', ') AS failure_reason
+              FROM artwork_indexer.event_queue eq
+              JOIN artwork_indexer.event_failure_reason efr
+                ON efr.event = eq.id
+             WHERE eq.id = 1
+          GROUP BY eq.id;
+        ''')).fetchone()
+
+        self.assertEqual(event['state'], 'failed')
+        self.assertRegex(
+            event['failure_reason'],
+            r'been running for more than 2\.5 minutes'
+        )
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

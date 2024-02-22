@@ -27,6 +27,9 @@ import urllib.parse
 
 IMAGE_FILE_FORMAT = '{bucket}-{id}.{suffix}'
 
+# connect, read timeouts
+REQUEST_TIMEOUT = (10, 30)
+
 
 def kebab(s):
     return s.replace('_', '-')
@@ -138,6 +141,7 @@ class EventHandler:
                 'x-archive-meta-mediatype': 'image',
                 'x-archive-meta-noindex': 'true',
             },
+            timeout=REQUEST_TIMEOUT
         ).raise_for_status()
 
         logging.info('Upload of %s succeeded', index_json_upload_url)
@@ -146,7 +150,8 @@ class EventHandler:
         entity_metadata_headers = self.build_metadata_headers()
         metadata_res = self.http_session.get(entity_metadata_url,
                                              headers=entity_metadata_headers,
-                                             stream=True)
+                                             stream=True,
+                                             timeout=REQUEST_TIMEOUT)
         metadata_res.raise_for_status()
 
         entity_metadata_upload_url = self.build_s3_item_url(
@@ -164,6 +169,7 @@ class EventHandler:
                 'x-archive-meta-mediatype': 'image',
                 'x-archive-meta-noindex': 'true',
             },
+            timeout=REQUEST_TIMEOUT
         ).raise_for_status()
 
         logging.info('Upload of %s succeeded', entity_metadata_upload_url)
@@ -207,6 +213,7 @@ class EventHandler:
                 'x-archive-meta-mediatype': 'image',
                 'x-archive-meta-noindex': 'true',
             },
+            timeout=REQUEST_TIMEOUT
         ).raise_for_status()
 
         logging.info('Copy from %s to %s succeeded',
@@ -261,6 +268,7 @@ class EventHandler:
                 'x-archive-keep-old-version': '1',
                 'x-archive-cascade-delete': '1',
             },
+            timeout=REQUEST_TIMEOUT
         ).raise_for_status()
 
         logging.info('Deletion of %s succeeded', target_url)
@@ -280,6 +288,7 @@ class EventHandler:
                 'x-archive-keep-old-version': '1',
                 'x-archive-cascade-delete': '1',
             },
+            timeout=REQUEST_TIMEOUT
         ).raise_for_status()
 
         logging.info('Deletion of %s succeeded', target_url)

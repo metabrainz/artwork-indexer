@@ -140,29 +140,29 @@ class MockClientSession():
             raise Exception('HTTP %d' % resp.status)
         return resp
 
-    def get(self, url, headers=None, **kwargs):
+    def get(self, url, **kwargs):
         self.last_requests.append({
             'method': 'GET',
             'url': url,
-            'headers': headers,
+            'headers': kwargs.get('headers'),
             'data': None
         })
         return self._get_next_response()
 
-    def put(self, url, headers=None, data=None):
+    def put(self, url, **kwargs):
         self.last_requests.append({
             'method': 'PUT',
             'url': url,
-            'headers': headers,
-            'data': data,
+            'headers': kwargs.get('headers'),
+            'data': kwargs.get('data'),
         })
         return self._get_next_response()
 
-    def delete(self, url, headers=None):
+    def delete(self, url, **kwargs):
         self.last_requests.append({
             'method': 'DELETE',
             'url': url,
-            'headers': headers,
+            'headers': kwargs.get('headers'),
             'data': None
         })
         return self._get_next_response()
