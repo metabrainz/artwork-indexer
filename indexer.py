@@ -41,6 +41,10 @@ from pg_conn_wrapper import PgConnWrapper
 # inspecting the `event_failure_reason` table.
 MAX_ATTEMPTS = 5
 
+# When set to True, indicates to the `indexer` event loop that it should
+# stop once idle.
+SHUTDOWN_SIGNAL = False
+
 
 def handle_event_failure(pg_conn, event, error):
     logging.error(error)
@@ -167,11 +171,6 @@ def run_event_handler(pg_conn, event, handler):
             WHERE id = %(event_id)s
         '''), {'event_id': event['id']})
         pg_conn.commit()
-
-
-# When set to True, indicates to the `indexer` event loop that it should
-# stop once idle.
-SHUTDOWN_SIGNAL = False
 
 
 def indexer(
