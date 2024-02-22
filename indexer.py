@@ -18,6 +18,7 @@
 
 import argparse
 import configparser
+import datetime
 import logging
 import os
 import signal
@@ -217,6 +218,7 @@ def indexer(
     }
 
     idle_loops = 0
+    last_cleanup_datetime = datetime.datetime.min
 
     while not SHUTDOWN_SIGNAL:
         time.sleep(sleep_amount)
@@ -229,8 +231,14 @@ def indexer(
             sleep_amount = 1
             idle_loops = 0
         else:
-            # Since there's nothing else to do, cleanup old events.
-            cleanup_events(pg_conn)
+            # Since there's nothing else to do, cleanup old events
+            # (but not too often).
+            current_datetime = datetime.datetime.now()
+            seconds_elapsed_since_last_cleanup = \
+                (current_datetime - last_cleanup_datetime).total_seconds()
+            if seconds_elapsed_since_last_cleanup >= 150:
+                cleanup_events(pg_conn)
+                last_cleanup_datetime = current_datetime
 
             idle_loops += 1
             if idle_loops >= max_idle_loops:
