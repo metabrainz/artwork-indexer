@@ -1,9 +1,15 @@
 import configparser
 import json
+import logging
 import unittest
 from textwrap import dedent
 
 from pg_conn_wrapper import PgConnWrapper
+
+
+logger = logging.getLogger()
+logger.setLevel(logging.CRITICAL)
+del logger
 
 
 tests_config = configparser.ConfigParser()

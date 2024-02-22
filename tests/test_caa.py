@@ -414,7 +414,6 @@ class TestCoverArtArchive(TestArtArchive):
 
         # Make the copy fail. This should halt processing of all dependant
         # events (delete_image, index).
-        print('note, the following test is expected to log an HTTP 400 error')
         self.session.last_requests = []
         self.session.next_responses = [
             MockResponse(status=400),
