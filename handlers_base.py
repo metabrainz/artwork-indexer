@@ -18,6 +18,7 @@
 
 import logging
 import json
+import time
 
 from psycopg import sql
 from textwrap import dedent
@@ -287,6 +288,8 @@ class EventHandler:
         message = event['message']
         if message.get('fail'):
             raise Exception('Failure (no-op)')
+        if 'sleep' in message:
+            time.sleep(message['sleep'])
 
 
 class MusicBrainzEventHandler(EventHandler):

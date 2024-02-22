@@ -169,6 +169,11 @@ def run_event_handler(pg_conn, event, handler):
         pg_conn.commit()
 
 
+# When set to True, indicates to the `indexer` event loop that it should
+# stop once idle.
+SHUTDOWN_SIGNAL = False
+
+
 def indexer(
     config,
     pg_conn,
@@ -191,7 +196,7 @@ def indexer(
 
     idle_loops = 0
 
-    while True:
+    while not SHUTDOWN_SIGNAL:
         time.sleep(sleep_amount)
 
         event = get_next_event(pg_conn)
@@ -322,6 +327,14 @@ def main():
         config.read('config.ini')
 
     signal.signal(signal.SIGHUP, reload_configuration)
+
+    def shutdown(signum, frame):
+        logging.info(f'Got signal {signum}, shutting down')
+        global SHUTDOWN_SIGNAL
+        SHUTDOWN_SIGNAL = True
+
+    signal.signal(signal.SIGTERM, shutdown)
+    signal.signal(signal.SIGINT, shutdown)
 
     if 'sentry' in config:
         sentry_dsn = config['sentry'].get('dsn')

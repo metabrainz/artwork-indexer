@@ -141,7 +141,7 @@ Event types and their expected `message` format are documented below.
 | copy_image    | `{"artwork_id": INT, "old_gid": UUID, "new_gid": UUID, "suffix": TEXT}` | copies an image from one bucket to another (after a release is merged)  |
 | delete_image  | `{"gid": UUID, "artwork_id": INT, "suffix": TEXT}`                      | deletes an image (including after a release is merged or deleted)       |
 | deindex       | `{"gid": UUID}`                                                         | deletes index.json (after a release is deleted)                         |
-| noop          | `{}` or `{"fail": BOOL}`                                                | for debugging (does nothing, or fails if `{"fail": true}` is specified) |
+| noop          | `{}` or `{"fail": BOOL}` or `{"sleep": REAL}`                           | for testing/debugging (does nothing, or optionally fails or sleeps)     |
 
 Failed events (any that encounter an exception during their execution) are
 tried up to 5 times; only after all attempts have been exhausted is an
