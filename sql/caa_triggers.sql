@@ -1,6 +1,5 @@
 -- Automatically generated, do not edit.
 
-SET LOCAL search_path = 'cover_art_archive';
 SET LOCAL client_min_messages = warning;
 
 -- We drop the triggers first to simulate "CREATE OR REPLACE,"
@@ -10,65 +9,65 @@ DROP TRIGGER IF EXISTS artwork_indexer_a_ins_cover_art ON cover_art_archive.cove
 
 CREATE TRIGGER artwork_indexer_a_ins_cover_art AFTER INSERT
     ON cover_art_archive.cover_art FOR EACH ROW
-    EXECUTE PROCEDURE cover_art_archive.artwork_indexer_a_ins_cover_art();
+    EXECUTE PROCEDURE artwork_indexer.a_ins_cover_art();
 
 DROP TRIGGER IF EXISTS artwork_indexer_a_upd_cover_art ON cover_art_archive.cover_art;
 
 CREATE TRIGGER artwork_indexer_a_upd_cover_art AFTER UPDATE
     ON cover_art_archive.cover_art FOR EACH ROW
-    EXECUTE PROCEDURE cover_art_archive.artwork_indexer_a_upd_cover_art();
+    EXECUTE PROCEDURE artwork_indexer.a_upd_cover_art();
 
 DROP TRIGGER IF EXISTS artwork_indexer_a_del_cover_art ON cover_art_archive.cover_art;
 
 CREATE TRIGGER artwork_indexer_a_del_cover_art AFTER DELETE
     ON cover_art_archive.cover_art FOR EACH ROW
-    EXECUTE PROCEDURE cover_art_archive.artwork_indexer_a_del_cover_art();
+    EXECUTE PROCEDURE artwork_indexer.a_del_cover_art();
 
 DROP TRIGGER IF EXISTS artwork_indexer_a_ins_cover_art_type ON cover_art_archive.cover_art_type;
 
 CREATE TRIGGER artwork_indexer_a_ins_cover_art_type AFTER INSERT
     ON cover_art_archive.cover_art_type FOR EACH ROW
-    EXECUTE PROCEDURE cover_art_archive.artwork_indexer_a_ins_cover_art_type();
+    EXECUTE PROCEDURE artwork_indexer.a_ins_cover_art_type();
 
 DROP TRIGGER IF EXISTS artwork_indexer_a_del_cover_art_type ON cover_art_archive.cover_art_type;
 
 CREATE TRIGGER artwork_indexer_a_del_cover_art_type AFTER DELETE
     ON cover_art_archive.cover_art_type FOR EACH ROW
-    EXECUTE PROCEDURE cover_art_archive.artwork_indexer_a_del_cover_art_type();
+    EXECUTE PROCEDURE artwork_indexer.a_del_cover_art_type();
 
 DROP TRIGGER IF EXISTS artwork_indexer_a_del_release ON musicbrainz.release;
 
 CREATE TRIGGER artwork_indexer_a_del_release AFTER DELETE
     ON musicbrainz.release FOR EACH ROW
-    EXECUTE PROCEDURE cover_art_archive.artwork_indexer_a_del_release();
+    EXECUTE PROCEDURE artwork_indexer.a_del_release();
 
 DROP TRIGGER IF EXISTS artwork_indexer_a_upd_artist ON musicbrainz.artist;
 
 CREATE TRIGGER artwork_indexer_a_upd_artist AFTER UPDATE
     ON musicbrainz.artist FOR EACH ROW
-    EXECUTE PROCEDURE cover_art_archive.artwork_indexer_a_upd_artist();
+    EXECUTE PROCEDURE artwork_indexer.a_upd_artist();
 
 DROP TRIGGER IF EXISTS artwork_indexer_a_upd_release ON musicbrainz.release;
 
 CREATE TRIGGER artwork_indexer_a_upd_release AFTER UPDATE
     ON musicbrainz.release FOR EACH ROW
-    EXECUTE PROCEDURE cover_art_archive.artwork_indexer_a_upd_release();
+    EXECUTE PROCEDURE artwork_indexer.a_upd_release();
 
 DROP TRIGGER IF EXISTS artwork_indexer_a_upd_release_meta ON musicbrainz.release_meta;
 
 CREATE TRIGGER artwork_indexer_a_upd_release_meta AFTER UPDATE
     ON musicbrainz.release_meta FOR EACH ROW
-    EXECUTE PROCEDURE cover_art_archive.artwork_indexer_a_upd_release_meta();
+    EXECUTE PROCEDURE artwork_indexer.a_upd_release_meta();
 
 DROP TRIGGER IF EXISTS artwork_indexer_a_ins_release_first_release_date ON musicbrainz.release_first_release_date;
 
 CREATE TRIGGER artwork_indexer_a_ins_release_first_release_date AFTER INSERT
     ON musicbrainz.release_first_release_date FOR EACH ROW
-    EXECUTE PROCEDURE cover_art_archive.artwork_indexer_a_ins_release_first_release_date();
+    EXECUTE PROCEDURE artwork_indexer.a_ins_release_first_release_date();
 
 DROP TRIGGER IF EXISTS artwork_indexer_a_del_release_first_release_date ON musicbrainz.release_first_release_date;
 
 CREATE TRIGGER artwork_indexer_a_del_release_first_release_date AFTER DELETE
     ON musicbrainz.release_first_release_date FOR EACH ROW
-    EXECUTE PROCEDURE cover_art_archive.artwork_indexer_a_del_release_first_release_date();
+    EXECUTE PROCEDURE artwork_indexer.a_del_release_first_release_date();
 

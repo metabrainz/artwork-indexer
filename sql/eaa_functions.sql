@@ -1,8 +1,6 @@
 -- Automatically generated, do not edit.
 
-SET LOCAL search_path = event_art_archive;
-
-CREATE OR REPLACE FUNCTION artwork_indexer_a_ins_event_art() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION artwork_indexer.a_ins_event_art() RETURNS trigger AS $$
 DECLARE
     event_gid UUID;
 BEGIN
@@ -17,7 +15,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION artwork_indexer_a_upd_event_art() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION artwork_indexer.a_upd_event_art() RETURNS trigger AS $$
 DECLARE
     suffix TEXT;
     old_event_gid UUID;
@@ -64,7 +62,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION artwork_indexer_a_del_event_art()
+CREATE OR REPLACE FUNCTION artwork_indexer.a_del_event_art()
 RETURNS trigger AS $$
 DECLARE
     suffix TEXT;
@@ -84,7 +82,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION artwork_indexer_a_ins_event_art_type() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION artwork_indexer.a_ins_event_art_type() RETURNS trigger AS $$
 DECLARE
     event_gid UUID;
 BEGIN
@@ -100,7 +98,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION artwork_indexer_a_del_event_art_type() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION artwork_indexer.a_del_event_art_type() RETURNS trigger AS $$
 DECLARE
     event_gid UUID;
 BEGIN
@@ -120,7 +118,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION artwork_indexer_a_del_event() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION artwork_indexer.a_del_event() RETURNS trigger AS $$
 BEGIN
     INSERT INTO artwork_indexer.event_queue (entity_type, action, message)
     VALUES ('event', 'deindex', jsonb_build_object('gid', OLD.gid))
@@ -138,7 +136,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION artwork_indexer_a_upd_event() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION artwork_indexer.a_upd_event() RETURNS trigger AS $$
 BEGIN
     IF (OLD.name != NEW.name) THEN
         INSERT INTO artwork_indexer.event_queue (entity_type, action, message) (

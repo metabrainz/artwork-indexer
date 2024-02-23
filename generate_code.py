@@ -66,7 +66,7 @@ for project in PROJECTS:
         q_im_table = f'{im_schema}.{im_table}'
 
         for tg_op in im['tg_ops']:
-            extra_functions_source += f'\nCREATE OR REPLACE FUNCTION artwork_indexer_a_{tg_op}_{im_table}() RETURNS trigger AS $$\n'
+            extra_functions_source += f'\nCREATE OR REPLACE FUNCTION artwork_indexer.a_{tg_op}_{im_table}() RETURNS trigger AS $$\n'
             extra_functions_source += 'BEGIN\n'
 
             tg_rowvar = 'OLD' if tg_op == 'del' else 'NEW'
@@ -128,15 +128,15 @@ for project in PROJECTS:
             extra_functions_source += 'END;\n'
             extra_functions_source += '$$ LANGUAGE plpgsql;\n'
 
-            tg_fn_name = f'artwork_indexer_a_{tg_op}_{im_table}'
-            tg_name = f'{tg_fn_name}'
+            tg_fn_name = f'a_{tg_op}_{im_table}'
+            tg_name = f'artwork_indexer_{tg_fn_name}'
 
             extra_triggers_source += dedent(f'''
                 DROP TRIGGER IF EXISTS {tg_name} ON {q_im_table};
 
                 CREATE TRIGGER {tg_name} AFTER {TG_OP_FULLNAMES[tg_op]}
                     ON {q_im_table} FOR EACH ROW
-                    EXECUTE PROCEDURE {art_schema}.{tg_fn_name}();
+                    EXECUTE PROCEDURE artwork_indexer.{tg_fn_name}();
             ''')
 
     def index_artwork_stmt(gids, parent):
@@ -179,9 +179,7 @@ for project in PROJECTS:
     functions_source = dedent(f'''\
         -- Automatically generated, do not edit.
 
-        SET LOCAL search_path = {art_schema};
-
-        CREATE OR REPLACE FUNCTION artwork_indexer_a_ins_{art_table}() RETURNS trigger AS $$
+        CREATE OR REPLACE FUNCTION artwork_indexer.a_ins_{art_table}() RETURNS trigger AS $$
         DECLARE
             {entity_type}_gid UUID;
         BEGIN
@@ -196,7 +194,7 @@ for project in PROJECTS:
         END;
         $$ LANGUAGE plpgsql;
 
-        CREATE OR REPLACE FUNCTION artwork_indexer_a_upd_{art_table}() RETURNS trigger AS $$
+        CREATE OR REPLACE FUNCTION artwork_indexer.a_upd_{art_table}() RETURNS trigger AS $$
         DECLARE
             suffix TEXT;
             old_{entity_type}_gid UUID;
@@ -243,7 +241,7 @@ for project in PROJECTS:
         END;
         $$ LANGUAGE plpgsql;
 
-        CREATE OR REPLACE FUNCTION artwork_indexer_a_del_{art_table}()
+        CREATE OR REPLACE FUNCTION artwork_indexer.a_del_{art_table}()
         RETURNS trigger AS $$
         DECLARE
             suffix TEXT;
@@ -263,7 +261,7 @@ for project in PROJECTS:
         END;
         $$ LANGUAGE plpgsql;
 
-        CREATE OR REPLACE FUNCTION artwork_indexer_a_ins_{art_table}_type() RETURNS trigger AS $$
+        CREATE OR REPLACE FUNCTION artwork_indexer.a_ins_{art_table}_type() RETURNS trigger AS $$
         DECLARE
             {entity_type}_gid UUID;
         BEGIN
@@ -279,7 +277,7 @@ for project in PROJECTS:
         END;
         $$ LANGUAGE plpgsql;
 
-        CREATE OR REPLACE FUNCTION artwork_indexer_a_del_{art_table}_type() RETURNS trigger AS $$
+        CREATE OR REPLACE FUNCTION artwork_indexer.a_del_{art_table}_type() RETURNS trigger AS $$
         DECLARE
             {entity_type}_gid UUID;
         BEGIN
@@ -299,7 +297,7 @@ for project in PROJECTS:
         END;
         $$ LANGUAGE plpgsql;
 
-        CREATE OR REPLACE FUNCTION artwork_indexer_a_del_{entity_table}() RETURNS trigger AS $$
+        CREATE OR REPLACE FUNCTION artwork_indexer.a_del_{entity_table}() RETURNS trigger AS $$
         BEGIN
             INSERT INTO artwork_indexer.event_queue (entity_type, action, message)
             VALUES ('{entity_type}', 'deindex', jsonb_build_object('gid', OLD.gid))
@@ -327,7 +325,6 @@ for project in PROJECTS:
     triggers_source = dedent(f'''\
         -- Automatically generated, do not edit.
 
-        SET LOCAL search_path = '{art_schema}';
         SET LOCAL client_min_messages = warning;
 
         -- We drop the triggers first to simulate "CREATE OR REPLACE,"
@@ -337,37 +334,37 @@ for project in PROJECTS:
 
         CREATE TRIGGER artwork_indexer_a_ins_{art_table} AFTER INSERT
             ON {art_schema}.{art_table} FOR EACH ROW
-            EXECUTE PROCEDURE {art_schema}.artwork_indexer_a_ins_{art_table}();
+            EXECUTE PROCEDURE artwork_indexer.a_ins_{art_table}();
 
         DROP TRIGGER IF EXISTS artwork_indexer_a_upd_{art_table} ON {art_schema}.{art_table};
 
         CREATE TRIGGER artwork_indexer_a_upd_{art_table} AFTER UPDATE
             ON {art_schema}.{art_table} FOR EACH ROW
-            EXECUTE PROCEDURE {art_schema}.artwork_indexer_a_upd_{art_table}();
+            EXECUTE PROCEDURE artwork_indexer.a_upd_{art_table}();
 
         DROP TRIGGER IF EXISTS artwork_indexer_a_del_{art_table} ON {art_schema}.{art_table};
 
         CREATE TRIGGER artwork_indexer_a_del_{art_table} AFTER DELETE
             ON {art_schema}.{art_table} FOR EACH ROW
-            EXECUTE PROCEDURE {art_schema}.artwork_indexer_a_del_{art_table}();
+            EXECUTE PROCEDURE artwork_indexer.a_del_{art_table}();
 
         DROP TRIGGER IF EXISTS artwork_indexer_a_ins_{art_table}_type ON {art_schema}.{art_table}_type;
 
         CREATE TRIGGER artwork_indexer_a_ins_{art_table}_type AFTER INSERT
             ON {art_schema}.{art_table}_type FOR EACH ROW
-            EXECUTE PROCEDURE {art_schema}.artwork_indexer_a_ins_{art_table}_type();
+            EXECUTE PROCEDURE artwork_indexer.a_ins_{art_table}_type();
 
         DROP TRIGGER IF EXISTS artwork_indexer_a_del_{art_table}_type ON {art_schema}.{art_table}_type;
 
         CREATE TRIGGER artwork_indexer_a_del_{art_table}_type AFTER DELETE
             ON {art_schema}.{art_table}_type FOR EACH ROW
-            EXECUTE PROCEDURE {art_schema}.artwork_indexer_a_del_{art_table}_type();
+            EXECUTE PROCEDURE artwork_indexer.a_del_{art_table}_type();
 
         DROP TRIGGER IF EXISTS artwork_indexer_a_del_{entity_table} ON {entity_schema}.{entity_table};
 
         CREATE TRIGGER artwork_indexer_a_del_{entity_table} AFTER DELETE
             ON {entity_schema}.{entity_table} FOR EACH ROW
-            EXECUTE PROCEDURE {art_schema}.artwork_indexer_a_del_{entity_table}();
+            EXECUTE PROCEDURE artwork_indexer.a_del_{entity_table}();
         ''')
 
     triggers_source += extra_triggers_source + '\n'
