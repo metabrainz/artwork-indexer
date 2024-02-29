@@ -107,7 +107,7 @@ class TestGeneral(TestArtArchive):
             self.pg_conn.execute_and_commit(dedent('''
                 UPDATE artwork_indexer.event_queue
                    SET last_updated =
-                        (NOW() - (interval '30 minutes' * 2 * attempts))
+                        (NOW() - (interval '1 hour' * attempts))
                  WHERE id = 1;
             '''))
 

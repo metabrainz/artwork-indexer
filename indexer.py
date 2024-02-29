@@ -154,15 +154,14 @@ def cleanup_events(pg_conn):
 def get_next_event(pg_conn):
     # Skip events that have reached `MAX_ATTEMPTS`.
     # In other cases, `last_updated` should be within a
-    # specific time interval. We start by waiting 30
-    # minutes, and double the amount of time after each
-    # attempt.
+    # specific time interval. We start by waiting 1 hour,
+    # and double the amount of time after each attempt.
     return pg_conn.execute(dedent('''
         SELECT * FROM artwork_indexer.event_queue eq
         WHERE eq.state = 'queued'
         AND eq.attempts < %(max_attempts)s
         AND eq.last_updated <=
-            (now() - (interval '30 minutes' * 2 * eq.attempts))
+            (now() - (interval '1 hour' * eq.attempts))
         AND (eq.depends_on IS NULL OR NOT EXISTS (
             SELECT TRUE
             FROM artwork_indexer.event_queue parent_eq
