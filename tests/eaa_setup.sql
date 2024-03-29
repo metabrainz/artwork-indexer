@@ -4,7 +4,9 @@ INSERT INTO musicbrainz.event
      VALUES (1, 'e2aad65a-12e0-44ec-b693-94d225154e90',
              'live at the place 1', 1990, 1990, '20:00', 1),
             (2, 'a0f19ff3-e140-417f-81c6-2a7466eeea0a',
-             'live at the place 2', 1991, 1991, '21:00', 1);
+             'live at the place 2', 1991, 1991, '21:00', 1),
+            (3, 'f5c9461c-e5b4-4152-9458-d9a74baa7161',
+             'artless event :(', NULL, NULL, '00:00', 1);
 
 INSERT INTO musicbrainz.editor
         (id, name, password, ha1, email, email_confirm_date)

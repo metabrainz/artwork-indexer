@@ -176,6 +176,19 @@ for project in PROJECTS:
         stmt += f') RETURNING id INTO STRICT {return_var};'
         return stmt
 
+    def deindex_artwork_stmt(gid, parent, indent):
+        stmt = 'INSERT INTO artwork_indexer.event_queue (entity_type, action, message, depends_on) '
+        stmt += f"VALUES ('{entity_type}', 'deindex', jsonb_build_object('gid', {gid}), {parent}) "
+        stmt += 'ON CONFLICT DO NOTHING;\n'
+        # Delete any previous 'index' events that were queued; it's unlikely
+        # these exist, but if they do we can avoid having them run and fail.
+        stmt += f'{" " * 4 * indent}DELETE FROM artwork_indexer.event_queue '
+        stmt += "WHERE state = 'queued' "
+        stmt += f"AND entity_type = '{entity_type}' "
+        stmt += "AND action = 'index' "
+        stmt += f"AND message = jsonb_build_object('gid', {gid});"
+        return stmt
+
     functions_source = dedent(f'''\
         -- Automatically generated, do not edit.
 
@@ -194,7 +207,7 @@ for project in PROJECTS:
         END;
         $$ LANGUAGE plpgsql;
 
-        CREATE OR REPLACE FUNCTION artwork_indexer.a_upd_{art_table}() RETURNS trigger AS $$
+        CREATE OR REPLACE FUNCTION artwork_indexer.b_upd_{art_table}() RETURNS trigger AS $$
         DECLARE
             suffix TEXT;
             old_{entity_type}_gid UUID;
@@ -230,9 +243,20 @@ for project in PROJECTS:
 
                 {delete_artwork_stmt('OLD.id', f'old_{entity_type}_gid', 'suffix', 'copy_event_id', 'delete_event_id')}
 
-                -- If there's an existing, queued index event, reset its parent to our
-                -- deletion event (i.e. delay it until after the deletion executes).
-                {index_artwork_stmt((f'old_{entity_type}_gid', f'new_{entity_type}_gid'), 'delete_event_id')}
+                -- Check if any images remain for the old {entity_type}. If not, deindex it.
+                PERFORM 1 FROM {q_art_table}
+                WHERE {q_art_table}.{entity_type} = OLD.{entity_type}
+                AND {q_art_table}.id != OLD.id
+                LIMIT 1;
+
+                IF FOUND THEN
+                    -- If there's an existing, queued index event, reset its parent to our
+                    -- deletion event (i.e. delay it until after the deletion executes).
+                    {index_artwork_stmt((f'old_{entity_type}_gid', f'new_{entity_type}_gid'), 'delete_event_id')}
+                ELSE
+                    {index_artwork_stmt((f'new_{entity_type}_gid',), 'delete_event_id')}
+                    {deindex_artwork_stmt(f'old_{entity_type}_gid', 'array[delete_event_id]', 5)}
+                END IF;
             ELSE
                 {index_artwork_stmt((f'old_{entity_type}_gid', f'new_{entity_type}_gid'), None)}
             END IF;
@@ -241,7 +265,7 @@ for project in PROJECTS:
         END;
         $$ LANGUAGE plpgsql;
 
-        CREATE OR REPLACE FUNCTION artwork_indexer.a_del_{art_table}()
+        CREATE OR REPLACE FUNCTION artwork_indexer.b_del_{art_table}()
         RETURNS trigger AS $$
         DECLARE
             suffix TEXT;
@@ -249,13 +273,17 @@ for project in PROJECTS:
             delete_event_id BIGINT;
         BEGIN
             SELECT {q_image_type_table}.suffix, {q_entity_table}.gid
-            INTO STRICT suffix, {entity_type}_gid
+            INTO suffix, {entity_type}_gid
             FROM {q_entity_table}
             JOIN {q_image_type_table} ON {q_image_type_table}.mime_type = OLD.mime_type
             WHERE {q_entity_table}.id = OLD.{entity_type};
 
-            {delete_artwork_stmt('OLD.id', f'{entity_type}_gid', 'suffix', None, 'delete_event_id')}
-            {index_artwork_stmt((f'{entity_type}_gid',), 'delete_event_id')}
+            -- If no row is found, it's likely because the entity itself has been
+            -- deleted, which cascades to this table.
+            IF FOUND THEN
+                {delete_artwork_stmt('OLD.id', f'{entity_type}_gid', 'suffix', None, 'delete_event_id')}
+                {index_artwork_stmt((f'{entity_type}_gid',), 'delete_event_id')}
+            END IF;
 
             RETURN OLD;
         END;
@@ -277,7 +305,7 @@ for project in PROJECTS:
         END;
         $$ LANGUAGE plpgsql;
 
-        CREATE OR REPLACE FUNCTION artwork_indexer.a_del_{art_table}_type() RETURNS trigger AS $$
+        CREATE OR REPLACE FUNCTION artwork_indexer.b_del_{art_table}_type() RETURNS trigger AS $$
         DECLARE
             {entity_type}_gid UUID;
         BEGIN
@@ -297,19 +325,27 @@ for project in PROJECTS:
         END;
         $$ LANGUAGE plpgsql;
 
-        CREATE OR REPLACE FUNCTION artwork_indexer.a_del_{entity_table}() RETURNS trigger AS $$
+        CREATE OR REPLACE FUNCTION artwork_indexer.b_del_{entity_table}() RETURNS trigger AS $$
         BEGIN
-            INSERT INTO artwork_indexer.event_queue (entity_type, action, message)
-            VALUES ('{entity_type}', 'deindex', jsonb_build_object('gid', OLD.gid))
-            ON CONFLICT DO NOTHING;
+            PERFORM 1 FROM {q_art_table}
+            WHERE {q_art_table}.{entity_type} = OLD.id
+            LIMIT 1;
 
-            -- Delete any previous 'index' events that were queued; it's unlikely
-            -- these exist, but if they do we can avoid having them run and fail.
-            DELETE FROM artwork_indexer.event_queue
-            WHERE state = 'queued'
-            AND entity_type = '{entity_type}'
-            AND action = 'index'
-            AND message = jsonb_build_object('gid', OLD.gid::text);
+            IF FOUND THEN
+                INSERT INTO artwork_indexer.event_queue (entity_type, action, message) (
+                    SELECT '{entity_type}', 'delete_image',
+                        jsonb_build_object(
+                            'artwork_id', {q_art_table}.id,
+                            'gid', OLD.gid,
+                            'suffix', {q_image_type_table}.suffix
+                        )
+                    FROM {q_art_table}
+                    JOIN {q_image_type_table} USING (mime_type)
+                    WHERE {q_art_table}.{entity_type} = OLD.id
+                )
+                ON CONFLICT DO NOTHING;
+                {deindex_artwork_stmt('OLD.gid', 'NULL', 4)}
+            END IF;
 
             RETURN OLD;
         END;
@@ -336,17 +372,17 @@ for project in PROJECTS:
             ON {art_schema}.{art_table} FOR EACH ROW
             EXECUTE PROCEDURE artwork_indexer.a_ins_{art_table}();
 
-        DROP TRIGGER IF EXISTS artwork_indexer_a_upd_{art_table} ON {art_schema}.{art_table};
+        DROP TRIGGER IF EXISTS artwork_indexer_b_upd_{art_table} ON {art_schema}.{art_table};
 
-        CREATE TRIGGER artwork_indexer_a_upd_{art_table} AFTER UPDATE
+        CREATE TRIGGER artwork_indexer_b_upd_{art_table} BEFORE UPDATE
             ON {art_schema}.{art_table} FOR EACH ROW
-            EXECUTE PROCEDURE artwork_indexer.a_upd_{art_table}();
+            EXECUTE PROCEDURE artwork_indexer.b_upd_{art_table}();
 
-        DROP TRIGGER IF EXISTS artwork_indexer_a_del_{art_table} ON {art_schema}.{art_table};
+        DROP TRIGGER IF EXISTS artwork_indexer_b_del_{art_table} ON {art_schema}.{art_table};
 
-        CREATE TRIGGER artwork_indexer_a_del_{art_table} AFTER DELETE
+        CREATE TRIGGER artwork_indexer_b_del_{art_table} BEFORE DELETE
             ON {art_schema}.{art_table} FOR EACH ROW
-            EXECUTE PROCEDURE artwork_indexer.a_del_{art_table}();
+            EXECUTE PROCEDURE artwork_indexer.b_del_{art_table}();
 
         DROP TRIGGER IF EXISTS artwork_indexer_a_ins_{art_table}_type ON {art_schema}.{art_table}_type;
 
@@ -354,17 +390,17 @@ for project in PROJECTS:
             ON {art_schema}.{art_table}_type FOR EACH ROW
             EXECUTE PROCEDURE artwork_indexer.a_ins_{art_table}_type();
 
-        DROP TRIGGER IF EXISTS artwork_indexer_a_del_{art_table}_type ON {art_schema}.{art_table}_type;
+        DROP TRIGGER IF EXISTS artwork_indexer_b_del_{art_table}_type ON {art_schema}.{art_table}_type;
 
-        CREATE TRIGGER artwork_indexer_a_del_{art_table}_type AFTER DELETE
+        CREATE TRIGGER artwork_indexer_b_del_{art_table}_type BEFORE DELETE
             ON {art_schema}.{art_table}_type FOR EACH ROW
-            EXECUTE PROCEDURE artwork_indexer.a_del_{art_table}_type();
+            EXECUTE PROCEDURE artwork_indexer.b_del_{art_table}_type();
 
-        DROP TRIGGER IF EXISTS artwork_indexer_a_del_{entity_table} ON {entity_schema}.{entity_table};
+        DROP TRIGGER IF EXISTS artwork_indexer_b_del_{entity_table} ON {entity_schema}.{entity_table};
 
-        CREATE TRIGGER artwork_indexer_a_del_{entity_table} AFTER DELETE
+        CREATE TRIGGER artwork_indexer_b_del_{entity_table} BEFORE DELETE
             ON {entity_schema}.{entity_table} FOR EACH ROW
-            EXECUTE PROCEDURE artwork_indexer.a_del_{entity_table}();
+            EXECUTE PROCEDURE artwork_indexer.b_del_{entity_table}();
         ''')
 
     triggers_source += extra_triggers_source + '\n'

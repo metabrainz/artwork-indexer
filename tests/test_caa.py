@@ -321,7 +321,7 @@ class TestCoverArtArchive(TestArtArchive):
             release_mb_metadata_xml_put(RELEASE1_MBID, xml),
         ])
 
-    def test_deleting_release(self):
+    def test_merging_releases(self):
         # artwork_indexer_a_del_release
 
         # Queue an index event (via artwork_indexer_a_upd_cover_art).
@@ -400,14 +400,14 @@ class TestCoverArtArchive(TestArtArchive):
                 'depends_on': [5],
                 'attempts': 0,
             },
-            release_index_event(RELEASE2_MBID, id=8, depends_on=[6]),
+            release_index_event(RELEASE2_MBID, id=7, depends_on=[6]),
             {
-                'id': 11,
+                'id': 8,
                 'state': 'queued',
                 'entity_type': 'release',
                 'action': 'deindex',
                 'message': {'gid': RELEASE1_MBID},
-                'depends_on': None,
+                'depends_on': [6],
                 'attempts': 0,
             },
         ])
@@ -458,7 +458,16 @@ class TestCoverArtArchive(TestArtArchive):
                 'depends_on': [5],
                 'attempts': 0,
             },
-            release_index_event(RELEASE2_MBID, id=8, depends_on=[6]),
+            release_index_event(RELEASE2_MBID, id=7, depends_on=[6]),
+            {
+                'id': 8,
+                'state': 'queued',
+                'entity_type': 'release',
+                'action': 'deindex',
+                'message': {'gid': RELEASE1_MBID},
+                'depends_on': [6],
+                'attempts': 0,
+            },
         ])
 
         self.assertEqual(
@@ -472,17 +481,6 @@ class TestCoverArtArchive(TestArtArchive):
 
         self.assertEqual(self.session.last_requests, [
             release_image_copy_put(RELEASE1_MBID, RELEASE2_MBID, 1),
-            {
-                'method': 'DELETE',
-                'url': f'http://mbid-{RELEASE1_MBID}.s3.example.com/' +
-                       'index.json',
-                'headers': {
-                    'authorization': 'LOW user:pass',
-                    'x-archive-keep-old-version': '1',
-                    'x-archive-cascade-delete': '1',
-                },
-                'data': None,
-            },
         ])
 
         # Revert the artificial failure we created, which should unblock
@@ -519,6 +517,7 @@ class TestCoverArtArchive(TestArtArchive):
             MockResponse(),
             MockResponse(status=200, content=xml),
             MockResponse(status=200, content=xml),
+            MockResponse(),
         ]
 
         indexer.indexer(tests_config, self.pg_conn, 1,
@@ -541,7 +540,62 @@ class TestCoverArtArchive(TestArtArchive):
             release_index_json_put(RELEASE2_MBID, [new_image1_json]),
             release_mb_metadata_xml_get(RELEASE2_MBID),
             release_mb_metadata_xml_put(RELEASE2_MBID, xml),
+            {
+                'method': 'DELETE',
+                'url': f'http://mbid-{RELEASE1_MBID}.s3.example.com/' +
+                       'index.json',
+                'headers': {
+                    'authorization': 'LOW user:pass',
+                    'x-archive-keep-old-version': '1',
+                    'x-archive-cascade-delete': '1',
+                },
+                'data': None,
+            },
         ])
+
+    def test_deleting_release_with_artwork(self):
+        # Deleting a release with artwork should queue `delete_image` and
+        # `deindex` events.
+
+        self.pg_conn.execute_and_commit(dedent('''
+            DELETE FROM release_country WHERE release = 1;
+            DELETE FROM release WHERE id = 1;
+        '''))
+
+        self.assertEqual(self.get_event_queue(), [
+            {
+                'id': 2,
+                'state': 'queued',
+                'entity_type': 'release',
+                'action': 'delete_image',
+                'message': {
+                    'artwork_id': 1,
+                    'gid': RELEASE1_MBID,
+                    'suffix': 'jpg'
+                },
+                'depends_on': None,
+                'attempts': 0,
+            },
+            {
+                'id': 3,
+                'state': 'queued',
+                'entity_type': 'release',
+                'action': 'deindex',
+                'message': {'gid': RELEASE1_MBID},
+                'depends_on': None,
+                'attempts': 0,
+            },
+        ])
+
+    def test_deleting_release_without_artwork(self):
+        # Deleting a release with no artwork should not queue a deindex.
+
+        self.pg_conn.execute_and_commit(dedent('''
+            DELETE FROM release_country WHERE release = 2;
+            DELETE FROM release WHERE id = 2;
+        '''))
+
+        self.assertEqual(self.get_event_queue(), [])
 
     def test_inserting_cover_art_type(self):
         # artwork_indexer_a_ins_cover_art_type

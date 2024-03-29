@@ -11,17 +11,17 @@ CREATE TRIGGER artwork_indexer_a_ins_cover_art AFTER INSERT
     ON cover_art_archive.cover_art FOR EACH ROW
     EXECUTE PROCEDURE artwork_indexer.a_ins_cover_art();
 
-DROP TRIGGER IF EXISTS artwork_indexer_a_upd_cover_art ON cover_art_archive.cover_art;
+DROP TRIGGER IF EXISTS artwork_indexer_b_upd_cover_art ON cover_art_archive.cover_art;
 
-CREATE TRIGGER artwork_indexer_a_upd_cover_art AFTER UPDATE
+CREATE TRIGGER artwork_indexer_b_upd_cover_art BEFORE UPDATE
     ON cover_art_archive.cover_art FOR EACH ROW
-    EXECUTE PROCEDURE artwork_indexer.a_upd_cover_art();
+    EXECUTE PROCEDURE artwork_indexer.b_upd_cover_art();
 
-DROP TRIGGER IF EXISTS artwork_indexer_a_del_cover_art ON cover_art_archive.cover_art;
+DROP TRIGGER IF EXISTS artwork_indexer_b_del_cover_art ON cover_art_archive.cover_art;
 
-CREATE TRIGGER artwork_indexer_a_del_cover_art AFTER DELETE
+CREATE TRIGGER artwork_indexer_b_del_cover_art BEFORE DELETE
     ON cover_art_archive.cover_art FOR EACH ROW
-    EXECUTE PROCEDURE artwork_indexer.a_del_cover_art();
+    EXECUTE PROCEDURE artwork_indexer.b_del_cover_art();
 
 DROP TRIGGER IF EXISTS artwork_indexer_a_ins_cover_art_type ON cover_art_archive.cover_art_type;
 
@@ -29,17 +29,17 @@ CREATE TRIGGER artwork_indexer_a_ins_cover_art_type AFTER INSERT
     ON cover_art_archive.cover_art_type FOR EACH ROW
     EXECUTE PROCEDURE artwork_indexer.a_ins_cover_art_type();
 
-DROP TRIGGER IF EXISTS artwork_indexer_a_del_cover_art_type ON cover_art_archive.cover_art_type;
+DROP TRIGGER IF EXISTS artwork_indexer_b_del_cover_art_type ON cover_art_archive.cover_art_type;
 
-CREATE TRIGGER artwork_indexer_a_del_cover_art_type AFTER DELETE
+CREATE TRIGGER artwork_indexer_b_del_cover_art_type BEFORE DELETE
     ON cover_art_archive.cover_art_type FOR EACH ROW
-    EXECUTE PROCEDURE artwork_indexer.a_del_cover_art_type();
+    EXECUTE PROCEDURE artwork_indexer.b_del_cover_art_type();
 
-DROP TRIGGER IF EXISTS artwork_indexer_a_del_release ON musicbrainz.release;
+DROP TRIGGER IF EXISTS artwork_indexer_b_del_release ON musicbrainz.release;
 
-CREATE TRIGGER artwork_indexer_a_del_release AFTER DELETE
+CREATE TRIGGER artwork_indexer_b_del_release BEFORE DELETE
     ON musicbrainz.release FOR EACH ROW
-    EXECUTE PROCEDURE artwork_indexer.a_del_release();
+    EXECUTE PROCEDURE artwork_indexer.b_del_release();
 
 DROP TRIGGER IF EXISTS artwork_indexer_a_upd_artist ON musicbrainz.artist;
 

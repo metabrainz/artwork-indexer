@@ -259,7 +259,7 @@ class TestEventArtArchive(TestArtArchive):
             event_mb_metadata_xml_put(EVENT1_MBID, EVENT1_XML),
         ])
 
-    def test_deleting_event(self):
+    def test_merging_events(self):
         # artwork_indexer_a_del_event
 
         # Queue an index event (via artwork_indexer_a_upd_event_art).
@@ -313,14 +313,14 @@ class TestEventArtArchive(TestArtArchive):
                 'depends_on': [5],
                 'attempts': 0,
             },
-            event_index_event(EVENT2_MBID, id=8, depends_on=[6]),
+            event_index_event(EVENT2_MBID, id=7, depends_on=[6]),
             {
-                'id': 9,
+                'id': 8,
                 'state': 'queued',
                 'entity_type': 'event',
                 'action': 'deindex',
                 'message': {'gid': EVENT1_MBID},
-                'depends_on': None,
+                'depends_on': [6],
                 'attempts': 0,
             },
         ])
@@ -371,7 +371,16 @@ class TestEventArtArchive(TestArtArchive):
                 'depends_on': [5],
                 'attempts': 0,
             },
-            event_index_event(EVENT2_MBID, id=8, depends_on=[6]),
+            event_index_event(EVENT2_MBID, id=7, depends_on=[6]),
+            {
+                'id': 8,
+                'state': 'queued',
+                'entity_type': 'event',
+                'action': 'deindex',
+                'message': {'gid': EVENT1_MBID},
+                'depends_on': [6],
+                'attempts': 0,
+            },
         ])
 
         self.assertEqual(
@@ -385,16 +394,6 @@ class TestEventArtArchive(TestArtArchive):
 
         self.assertEqual(self.session.last_requests, [
             event_image_copy_put(EVENT1_MBID, EVENT2_MBID, 1),
-            {
-                'method': 'DELETE',
-                'url': f'http://mbid-{EVENT1_MBID}.s3.example.com/index.json',
-                'headers': {
-                    'authorization': 'LOW user:pass',
-                    'x-archive-keep-old-version': '1',
-                    'x-archive-cascade-delete': '1',
-                },
-                'data': None,
-            },
         ])
 
         # Revert the artificial failure we created, which should unblock
@@ -412,6 +411,7 @@ class TestEventArtArchive(TestArtArchive):
             MockResponse(),
             MockResponse(status=200, content=EVENT2_XML),
             MockResponse(status=200, content=EVENT2_XML),
+            MockResponse(),
         ]
 
         indexer.indexer(tests_config, self.pg_conn, 1,
@@ -437,7 +437,59 @@ class TestEventArtArchive(TestArtArchive):
             ]),
             event_mb_metadata_xml_get(EVENT2_MBID),
             event_mb_metadata_xml_put(EVENT2_MBID, EVENT2_XML),
+            {
+                'method': 'DELETE',
+                'url': f'http://mbid-{EVENT1_MBID}.s3.example.com/index.json',
+                'headers': {
+                    'authorization': 'LOW user:pass',
+                    'x-archive-keep-old-version': '1',
+                    'x-archive-cascade-delete': '1',
+                },
+                'data': None,
+            },
         ])
+
+    def test_deleting_event_with_artwork(self):
+        # Deleting an event with artwork should queue `delete_image` and
+        # `deindex` events.
+
+        self.pg_conn.execute_and_commit(dedent('''
+            DELETE FROM event WHERE id = 1;
+        '''))
+
+        self.assertEqual(self.get_event_queue(), [
+            {
+                'id': 1,
+                'state': 'queued',
+                'entity_type': 'event',
+                'action': 'delete_image',
+                'message': {
+                    'artwork_id': 1,
+                    'gid': EVENT1_MBID,
+                    'suffix': 'jpg'
+                },
+                'depends_on': None,
+                'attempts': 0,
+            },
+            {
+                'id': 2,
+                'state': 'queued',
+                'entity_type': 'event',
+                'action': 'deindex',
+                'message': {'gid': EVENT1_MBID},
+                'depends_on': None,
+                'attempts': 0,
+            },
+        ])
+
+    def test_deleting_event_without_artwork(self):
+        # Deleting an event with no artwork should not queue a deindex.
+
+        self.pg_conn.execute_and_commit(dedent('''
+            DELETE FROM event WHERE id = 3;
+        '''))
+
+        self.assertEqual(self.get_event_queue(), [])
 
     def test_inserting_event_art_type(self):
         # artwork_indexer_a_ins_event_art_type

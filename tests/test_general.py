@@ -66,7 +66,7 @@ class TestGeneral(TestArtArchive):
 
         self.pg_conn.execute_and_commit(dedent('''
             UPDATE artwork_indexer.event_queue
-            SET created = (created - interval '90 days');
+            SET created = (created - interval '100 days');
         '''))
 
         indexer.indexer(tests_config, self.pg_conn, 2,
