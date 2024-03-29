@@ -27,6 +27,7 @@ COPY --chown=art:art \
     handlers.py \
     handlers_base.py \
     indexer.py \
+    pg_conn_wrapper.py \
     ./
 
 COPY docker/artwork-indexer \
