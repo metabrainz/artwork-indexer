@@ -256,7 +256,7 @@ class TestCoverArtArchive(TestArtArchive):
         )
 
     def test_deleting_cover_art(self):
-        # artwork_indexer_a_del_cover_art
+        # artwork_indexer_b_del_cover_art
 
         self.pg_conn.execute_and_commit(dedent('''
             DELETE FROM cover_art_archive.cover_art
@@ -322,7 +322,8 @@ class TestCoverArtArchive(TestArtArchive):
         ])
 
     def test_merging_releases(self):
-        # artwork_indexer_a_del_release
+        # artwork_indexer_b_upd_cover_art
+        # artwork_indexer_b_del_release
 
         # Queue an index event (via artwork_indexer_a_upd_cover_art).
         # We're checking that it's replaced by the following release
@@ -554,6 +555,8 @@ class TestCoverArtArchive(TestArtArchive):
         ])
 
     def test_deleting_release_with_artwork(self):
+        # artwork_indexer_b_del_release
+
         # Deleting a release with artwork should queue `delete_image` and
         # `deindex` events.
 
@@ -588,6 +591,8 @@ class TestCoverArtArchive(TestArtArchive):
         ])
 
     def test_deleting_release_without_artwork(self):
+        # artwork_indexer_b_del_release
+
         # Deleting a release with no artwork should not queue a deindex.
 
         self.pg_conn.execute_and_commit(dedent('''
@@ -617,7 +622,7 @@ class TestCoverArtArchive(TestArtArchive):
         )
 
     def test_deleting_cover_art_type(self):
-        # artwork_indexer_a_del_cover_art_type
+        # artwork_indexer_b_del_cover_art_type
 
         self.pg_conn.execute_and_commit(dedent('''
             DELETE FROM cover_art_archive.cover_art_type

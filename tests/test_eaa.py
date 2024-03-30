@@ -206,7 +206,7 @@ class TestEventArtArchive(TestArtArchive):
         )
 
     def test_deleting_event_art(self):
-        # artwork_indexer_a_del_event_art
+        # artwork_indexer_b_del_event_art
 
         self.pg_conn.execute_and_commit(dedent('''
             DELETE FROM event_art_archive.event_art
@@ -260,7 +260,8 @@ class TestEventArtArchive(TestArtArchive):
         ])
 
     def test_merging_events(self):
-        # artwork_indexer_a_del_event
+        # artwork_indexer_b_upd_event_art
+        # artwork_indexer_b_del_event
 
         # Queue an index event (via artwork_indexer_a_upd_event_art).
         # We're checking that it's replaced by the following event
@@ -450,6 +451,8 @@ class TestEventArtArchive(TestArtArchive):
         ])
 
     def test_deleting_event_with_artwork(self):
+        # artwork_indexer_b_del_event
+
         # Deleting an event with artwork should queue `delete_image` and
         # `deindex` events.
 
@@ -483,6 +486,8 @@ class TestEventArtArchive(TestArtArchive):
         ])
 
     def test_deleting_event_without_artwork(self):
+        # artwork_indexer_b_del_event
+
         # Deleting an event with no artwork should not queue a deindex.
 
         self.pg_conn.execute_and_commit(dedent('''
@@ -512,7 +517,7 @@ class TestEventArtArchive(TestArtArchive):
         )
 
     def test_deleting_event_art_type(self):
-        # artwork_indexer_a_del_event_art_type
+        # artwork_indexer_b_del_event_art_type
 
         self.pg_conn.execute_and_commit(dedent('''
             DELETE FROM event_art_archive.event_art_type
