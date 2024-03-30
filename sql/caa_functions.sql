@@ -9,7 +9,9 @@ BEGIN
     FROM musicbrainz.release
     WHERE musicbrainz.release.id = NEW.release;
 
-    INSERT INTO artwork_indexer.event_queue (entity_type, action, message) VALUES ('release', 'index', jsonb_build_object('gid', release_gid)) ON CONFLICT DO NOTHING;
+    INSERT INTO artwork_indexer.event_queue (entity_type, action, message)
+    VALUES ('release', 'index', jsonb_build_object('gid', release_gid))
+    ON CONFLICT DO NOTHING;
 
     RETURN NEW;
 END;
@@ -49,7 +51,9 @@ BEGIN
         ))
         RETURNING id INTO STRICT copy_event_id;
 
-        INSERT INTO artwork_indexer.event_queue (entity_type, action, message, depends_on) VALUES ('release', 'delete_image', jsonb_build_object('artwork_id', OLD.id, 'gid', old_release_gid, 'suffix', suffix), array[copy_event_id]) RETURNING id INTO STRICT delete_event_id;
+        INSERT INTO artwork_indexer.event_queue (entity_type, action, message, depends_on)
+        VALUES ('release', 'delete_image', jsonb_build_object('artwork_id', OLD.id, 'gid', old_release_gid, 'suffix', suffix), array[copy_event_id])
+        RETURNING id INTO STRICT delete_event_id;
 
         -- Check if any images remain for the old release. If not, deindex it.
         PERFORM 1 FROM cover_art_archive.cover_art
@@ -60,14 +64,30 @@ BEGIN
         IF FOUND THEN
             -- If there's an existing, queued index event, reset its parent to our
             -- deletion event (i.e. delay it until after the deletion executes).
-            INSERT INTO artwork_indexer.event_queue (entity_type, action, message, depends_on) VALUES ('release', 'index', jsonb_build_object('gid', old_release_gid), array[delete_event_id]), ('release', 'index', jsonb_build_object('gid', new_release_gid), array[delete_event_id]) ON CONFLICT (entity_type, action, message) WHERE state = 'queued' DO UPDATE SET depends_on = (coalesce(artwork_indexer.event_queue.depends_on, '{}') || delete_event_id);
+            INSERT INTO artwork_indexer.event_queue (entity_type, action, message, depends_on)
+            VALUES ('release', 'index', jsonb_build_object('gid', old_release_gid), array[delete_event_id]), ('release', 'index', jsonb_build_object('gid', new_release_gid), array[delete_event_id])
+            ON CONFLICT (entity_type, action, message) WHERE state = 'queued'
+            DO UPDATE SET depends_on = (coalesce(artwork_indexer.event_queue.depends_on, '{}') || delete_event_id);
         ELSE
-            INSERT INTO artwork_indexer.event_queue (entity_type, action, message, depends_on) VALUES ('release', 'index', jsonb_build_object('gid', new_release_gid), array[delete_event_id]) ON CONFLICT (entity_type, action, message) WHERE state = 'queued' DO UPDATE SET depends_on = (coalesce(artwork_indexer.event_queue.depends_on, '{}') || delete_event_id);
-            INSERT INTO artwork_indexer.event_queue (entity_type, action, message, depends_on) VALUES ('release', 'deindex', jsonb_build_object('gid', old_release_gid), array[delete_event_id]) ON CONFLICT DO NOTHING;
-            DELETE FROM artwork_indexer.event_queue WHERE state = 'queued' AND entity_type = 'release' AND action = 'index' AND message = jsonb_build_object('gid', old_release_gid);
+            INSERT INTO artwork_indexer.event_queue (entity_type, action, message, depends_on)
+            VALUES ('release', 'index', jsonb_build_object('gid', new_release_gid), array[delete_event_id])
+            ON CONFLICT (entity_type, action, message) WHERE state = 'queued'
+            DO UPDATE SET depends_on = (coalesce(artwork_indexer.event_queue.depends_on, '{}') || delete_event_id);
+
+            INSERT INTO artwork_indexer.event_queue (entity_type, action, message, depends_on)
+            VALUES ('release', 'deindex', jsonb_build_object('gid', old_release_gid), array[delete_event_id])
+            ON CONFLICT DO NOTHING;
+
+            DELETE FROM artwork_indexer.event_queue
+            WHERE state = 'queued'
+            AND entity_type = 'release'
+            AND action = 'index'
+            AND message = jsonb_build_object('gid', old_release_gid);
         END IF;
     ELSE
-        INSERT INTO artwork_indexer.event_queue (entity_type, action, message) VALUES ('release', 'index', jsonb_build_object('gid', old_release_gid)), ('release', 'index', jsonb_build_object('gid', new_release_gid)) ON CONFLICT DO NOTHING;
+        INSERT INTO artwork_indexer.event_queue (entity_type, action, message)
+        VALUES ('release', 'index', jsonb_build_object('gid', old_release_gid)), ('release', 'index', jsonb_build_object('gid', new_release_gid))
+        ON CONFLICT DO NOTHING;
     END IF;
 
     RETURN NEW;
@@ -90,8 +110,14 @@ BEGIN
     -- If no row is found, it's likely because the entity itself has been
     -- deleted, which cascades to this table.
     IF FOUND THEN
-        INSERT INTO artwork_indexer.event_queue (entity_type, action, message) VALUES ('release', 'delete_image', jsonb_build_object('artwork_id', OLD.id, 'gid', release_gid, 'suffix', suffix)) RETURNING id INTO STRICT delete_event_id;
-        INSERT INTO artwork_indexer.event_queue (entity_type, action, message, depends_on) VALUES ('release', 'index', jsonb_build_object('gid', release_gid), array[delete_event_id]) ON CONFLICT (entity_type, action, message) WHERE state = 'queued' DO UPDATE SET depends_on = (coalesce(artwork_indexer.event_queue.depends_on, '{}') || delete_event_id);
+        INSERT INTO artwork_indexer.event_queue (entity_type, action, message)
+        VALUES ('release', 'delete_image', jsonb_build_object('artwork_id', OLD.id, 'gid', release_gid, 'suffix', suffix))
+        RETURNING id INTO STRICT delete_event_id;
+
+        INSERT INTO artwork_indexer.event_queue (entity_type, action, message, depends_on)
+        VALUES ('release', 'index', jsonb_build_object('gid', release_gid), array[delete_event_id])
+        ON CONFLICT (entity_type, action, message) WHERE state = 'queued'
+        DO UPDATE SET depends_on = (coalesce(artwork_indexer.event_queue.depends_on, '{}') || delete_event_id);
     END IF;
 
     RETURN OLD;
@@ -108,7 +134,9 @@ BEGIN
     JOIN cover_art_archive.cover_art ON musicbrainz.release.id = cover_art_archive.cover_art.release
     WHERE cover_art_archive.cover_art.id = NEW.id;
 
-    INSERT INTO artwork_indexer.event_queue (entity_type, action, message) VALUES ('release', 'index', jsonb_build_object('gid', release_gid)) ON CONFLICT DO NOTHING;
+    INSERT INTO artwork_indexer.event_queue (entity_type, action, message)
+    VALUES ('release', 'index', jsonb_build_object('gid', release_gid))
+    ON CONFLICT DO NOTHING;
 
     RETURN NEW;
 END;
@@ -127,7 +155,9 @@ BEGIN
     -- If no row is found, it's likely because the artwork itself has been
     -- deleted, which cascades to this table.
     IF FOUND THEN
-        INSERT INTO artwork_indexer.event_queue (entity_type, action, message) VALUES ('release', 'index', jsonb_build_object('gid', release_gid)) ON CONFLICT DO NOTHING;
+        INSERT INTO artwork_indexer.event_queue (entity_type, action, message)
+        VALUES ('release', 'index', jsonb_build_object('gid', release_gid))
+        ON CONFLICT DO NOTHING;
     END IF;
 
     RETURN OLD;
@@ -153,8 +183,16 @@ BEGIN
             WHERE cover_art_archive.cover_art.release = OLD.id
         )
         ON CONFLICT DO NOTHING;
-        INSERT INTO artwork_indexer.event_queue (entity_type, action, message, depends_on) VALUES ('release', 'deindex', jsonb_build_object('gid', OLD.gid), NULL) ON CONFLICT DO NOTHING;
-        DELETE FROM artwork_indexer.event_queue WHERE state = 'queued' AND entity_type = 'release' AND action = 'index' AND message = jsonb_build_object('gid', OLD.gid);
+
+        INSERT INTO artwork_indexer.event_queue (entity_type, action, message, depends_on)
+        VALUES ('release', 'deindex', jsonb_build_object('gid', OLD.gid), NULL)
+        ON CONFLICT DO NOTHING;
+
+        DELETE FROM artwork_indexer.event_queue
+        WHERE state = 'queued'
+        AND entity_type = 'release'
+        AND action = 'index'
+        AND message = jsonb_build_object('gid', OLD.gid);
     END IF;
 
     RETURN OLD;

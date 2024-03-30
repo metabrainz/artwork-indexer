@@ -31,6 +31,11 @@ TG_OP_FULLNAMES = {
     'del': 'DELETE',
 }
 
+indent_level = 1
+def indent():
+    global indent_level
+    return ' ' * 4 * indent_level
+
 handlers_source = dedent('''\
     # Automatically generated, do not edit.
 
@@ -59,6 +64,7 @@ for project in PROJECTS:
 
     extra_functions_source = ''
     extra_triggers_source = ''
+    indent_level = 1
 
     for im in project['indexed_metadata']:
         im_schema = im['schema']
@@ -70,7 +76,6 @@ for project in PROJECTS:
             extra_functions_source += 'BEGIN\n'
 
             tg_rowvar = 'OLD' if tg_op == 'del' else 'NEW'
-            indent = '    '
 
             col_comparisons = []
             if tg_op == 'upd':
@@ -83,15 +88,15 @@ for project in PROJECTS:
 
             if col_comparisons:
                 col_comparisons_source = ' OR '.join(col_comparisons)
-                extra_functions_source += f'{indent}IF ({col_comparisons_source}) THEN\n'
-                indent += '    '
+                extra_functions_source += f'{indent()}IF ({col_comparisons_source}) THEN\n'
+                indent_level += 1
 
-            extra_functions_source += f'{indent}INSERT INTO artwork_indexer.event_queue (entity_type, action, message)'
+            extra_functions_source += f'{indent()}INSERT INTO artwork_indexer.event_queue (entity_type, action, message)'
 
-            indent += '    '
+            indent_level += 1
             extra_functions_source += ' (\n'
-            extra_functions_source += f"{indent}SELECT '{entity_type}', 'index', jsonb_build_object('gid', {q_entity_table}.gid)\n"
-            extra_functions_source += f'{indent}FROM {q_entity_table}\n'
+            extra_functions_source += f"{indent()}SELECT '{entity_type}', 'index', jsonb_build_object('gid', {q_entity_table}.gid)\n"
+            extra_functions_source += f'{indent()}FROM {q_entity_table}\n'
 
             for join in im.get('joins', ()):
                 (lhs_schema, lhs_table, lhs_col) = join['lhs']
@@ -100,31 +105,31 @@ for project in PROJECTS:
                 q_lhs_table = f'{lhs_schema}.{lhs_table}'
                 q_rhs_table = f'{rhs_schema}.{rhs_table}'
 
-                extra_functions_source += f'{indent}JOIN {q_lhs_table} ON {q_lhs_table}.{lhs_col} = {q_rhs_table}.{rhs_col}\n'
+                extra_functions_source += f'{indent()}JOIN {q_lhs_table} ON {q_lhs_table}.{lhs_col} = {q_rhs_table}.{rhs_col}\n'
 
-            extra_functions_source += f'{indent}WHERE EXISTS (\n'
-            indent += '    '
-            extra_functions_source += f'{indent}SELECT 1 FROM {q_art_table}\n'
-            extra_functions_source += f'{indent}WHERE {q_art_table}.{entity_type} = {q_entity_table}.id\n'
-            indent = indent[:-4]
-            extra_functions_source += f'{indent})\n'
+            extra_functions_source += f'{indent()}WHERE EXISTS (\n'
+            indent_level += 1
+            extra_functions_source += f'{indent()}SELECT 1 FROM {q_art_table}\n'
+            extra_functions_source += f'{indent()}WHERE {q_art_table}.{entity_type} = {q_entity_table}.id\n'
+            indent_level -= 1
+            extra_functions_source += f'{indent()})\n'
 
             if q_im_table == q_entity_table:
-                extra_functions_source += f"{indent}AND {q_entity_table}.gid = {tg_rowvar}.gid\n"
+                extra_functions_source += f"{indent()}AND {q_entity_table}.gid = {tg_rowvar}.gid\n"
 
             im_condition = im.get('condition')
             if im_condition:
-                extra_functions_source += f'{indent}AND {im_condition.format(tg_rowvar=tg_rowvar)}\n'
+                extra_functions_source += f'{indent()}AND {im_condition.format(tg_rowvar=tg_rowvar)}\n'
 
-            indent = indent[:-4]
-            extra_functions_source += f'{indent})\n'
+            indent_level -= 1
+            extra_functions_source += f'{indent()})\n'
 
-            extra_functions_source += f'{indent}ON CONFLICT DO NOTHING;\n'
+            extra_functions_source += f'{indent()}ON CONFLICT DO NOTHING;\n'
             if col_comparisons:
-                indent = indent[:-4]
-                extra_functions_source += f'{indent}END IF;\n'
+                indent_level -= 1
+                extra_functions_source += f'{indent()}END IF;\n'
 
-            extra_functions_source += f'\n{indent}RETURN {tg_rowvar};\n'
+            extra_functions_source += f'\n{indent()}RETURN {tg_rowvar};\n'
             extra_functions_source += 'END;\n'
             extra_functions_source += '$$ LANGUAGE plpgsql;\n'
 
@@ -139,54 +144,59 @@ for project in PROJECTS:
                     EXECUTE PROCEDURE artwork_indexer.{tg_fn_name}();
             ''')
 
-    def index_artwork_stmt(gids, parent):
+    def index_artwork_stmt(gids, parent, starting_indent_level):
+        global indent_level
+        indent_level = starting_indent_level
         stmt = 'INSERT INTO artwork_indexer.event_queue ('
         stmt += 'entity_type, action, message'
         if parent:
             stmt += ', depends_on'
-        stmt += ') VALUES '
+        stmt += ')\n'
+        stmt += f'{indent()}VALUES '
         stmt += ', '.join([
             (
                 f"('{entity_type}', 'index', jsonb_build_object('gid', {gid})" +
                 (f", array[{parent}])" if parent else ')')
             ) for gid in gids
         ])
-        stmt += ' ON CONFLICT ';
+        stmt += '\n'
+        stmt += f'{indent()}ON CONFLICT ';
         if parent:
-            stmt += "(entity_type, action, message) WHERE state = 'queued' "
-            stmt += f"DO UPDATE SET depends_on = (coalesce(artwork_indexer.event_queue.depends_on, '{{}}') || {parent});"
+            stmt += "(entity_type, action, message) WHERE state = 'queued'\n"
+            stmt += f"{indent()}DO UPDATE SET depends_on = (coalesce(artwork_indexer.event_queue.depends_on, '{{}}') || {parent});"
         else:
             stmt += 'DO NOTHING;'
         return stmt
 
-    def delete_artwork_stmt(artwork_id, gid, suffix, parent, return_var):
+    def delete_artwork_stmt(artwork_id, gid, suffix, parent, return_var, starting_indent_level):
+        global indent_level
+        indent_level = starting_indent_level
         stmt = 'INSERT INTO artwork_indexer.event_queue ('
         stmt += 'entity_type, action, message'
         if parent:
             stmt += ', depends_on'
-        stmt += ') VALUES ('
-        stmt += f"'{entity_type}', 'delete_image', "
-        stmt += 'jsonb_build_object('
-        stmt += f"'artwork_id', {artwork_id}, "
-        stmt += f"'gid', {gid}, "
-        stmt += f"'suffix', {suffix}"
-        stmt += ')'
+        stmt += ')\n'
+        stmt += f"{indent()}VALUES ('{entity_type}', 'delete_image', "
+        stmt += f"jsonb_build_object('artwork_id', {artwork_id}, 'gid', {gid}, 'suffix', {suffix})"
         if parent:
             stmt += f", array[{parent}]"
-        stmt += f') RETURNING id INTO STRICT {return_var};'
+        stmt += ')\n'
+        stmt += f'{indent()}RETURNING id INTO STRICT {return_var};'
         return stmt
 
-    def deindex_artwork_stmt(gid, parent, indent):
-        stmt = 'INSERT INTO artwork_indexer.event_queue (entity_type, action, message, depends_on) '
-        stmt += f"VALUES ('{entity_type}', 'deindex', jsonb_build_object('gid', {gid}), {parent}) "
-        stmt += 'ON CONFLICT DO NOTHING;\n'
+    def deindex_artwork_stmt(gid, parent, starting_indent_level):
+        global indent_level
+        indent_level = starting_indent_level
+        stmt = 'INSERT INTO artwork_indexer.event_queue (entity_type, action, message, depends_on)\n'
+        stmt += f"{indent()}VALUES ('{entity_type}', 'deindex', jsonb_build_object('gid', {gid}), {parent})\n"
+        stmt += f'{indent()}ON CONFLICT DO NOTHING;\n\n'
         # Delete any previous 'index' events that were queued; it's unlikely
         # these exist, but if they do we can avoid having them run and fail.
-        stmt += f'{" " * 4 * indent}DELETE FROM artwork_indexer.event_queue '
-        stmt += "WHERE state = 'queued' "
-        stmt += f"AND entity_type = '{entity_type}' "
-        stmt += "AND action = 'index' "
-        stmt += f"AND message = jsonb_build_object('gid', {gid});"
+        stmt += f'{indent()}DELETE FROM artwork_indexer.event_queue\n'
+        stmt += f"{indent()}WHERE state = 'queued'\n"
+        stmt += f"{indent()}AND entity_type = '{entity_type}'\n"
+        stmt += f"{indent()}AND action = 'index'\n"
+        stmt += f"{indent()}AND message = jsonb_build_object('gid', {gid});"
         return stmt
 
     functions_source = dedent(f'''\
@@ -201,7 +211,7 @@ for project in PROJECTS:
             FROM {q_entity_table}
             WHERE {q_entity_table}.id = NEW.{entity_type};
 
-            {index_artwork_stmt((f'{entity_type}_gid',), None)}
+            {index_artwork_stmt((f'{entity_type}_gid',), None, 3)}
 
             RETURN NEW;
         END;
@@ -241,7 +251,7 @@ for project in PROJECTS:
                 ))
                 RETURNING id INTO STRICT copy_event_id;
 
-                {delete_artwork_stmt('OLD.id', f'old_{entity_type}_gid', 'suffix', 'copy_event_id', 'delete_event_id')}
+                {delete_artwork_stmt('OLD.id', f'old_{entity_type}_gid', 'suffix', 'copy_event_id', 'delete_event_id', 4)}
 
                 -- Check if any images remain for the old {entity_type}. If not, deindex it.
                 PERFORM 1 FROM {q_art_table}
@@ -252,13 +262,14 @@ for project in PROJECTS:
                 IF FOUND THEN
                     -- If there's an existing, queued index event, reset its parent to our
                     -- deletion event (i.e. delay it until after the deletion executes).
-                    {index_artwork_stmt((f'old_{entity_type}_gid', f'new_{entity_type}_gid'), 'delete_event_id')}
+                    {index_artwork_stmt((f'old_{entity_type}_gid', f'new_{entity_type}_gid'), 'delete_event_id', 5)}
                 ELSE
-                    {index_artwork_stmt((f'new_{entity_type}_gid',), 'delete_event_id')}
+                    {index_artwork_stmt((f'new_{entity_type}_gid',), 'delete_event_id', 5)}
+
                     {deindex_artwork_stmt(f'old_{entity_type}_gid', 'array[delete_event_id]', 5)}
                 END IF;
             ELSE
-                {index_artwork_stmt((f'old_{entity_type}_gid', f'new_{entity_type}_gid'), None)}
+                {index_artwork_stmt((f'old_{entity_type}_gid', f'new_{entity_type}_gid'), None, 4)}
             END IF;
 
             RETURN NEW;
@@ -281,8 +292,9 @@ for project in PROJECTS:
             -- If no row is found, it's likely because the entity itself has been
             -- deleted, which cascades to this table.
             IF FOUND THEN
-                {delete_artwork_stmt('OLD.id', f'{entity_type}_gid', 'suffix', None, 'delete_event_id')}
-                {index_artwork_stmt((f'{entity_type}_gid',), 'delete_event_id')}
+                {delete_artwork_stmt('OLD.id', f'{entity_type}_gid', 'suffix', None, 'delete_event_id', 4)}
+
+                {index_artwork_stmt((f'{entity_type}_gid',), 'delete_event_id', 4)}
             END IF;
 
             RETURN OLD;
@@ -299,7 +311,7 @@ for project in PROJECTS:
             JOIN {q_art_table} ON {q_entity_table}.id = {q_art_table}.{entity_type}
             WHERE {q_art_table}.id = NEW.id;
 
-            {index_artwork_stmt((f'{entity_type}_gid',), None)}
+            {index_artwork_stmt((f'{entity_type}_gid',), None, 3)}
 
             RETURN NEW;
         END;
@@ -318,7 +330,7 @@ for project in PROJECTS:
             -- If no row is found, it's likely because the artwork itself has been
             -- deleted, which cascades to this table.
             IF FOUND THEN
-                {index_artwork_stmt((f'{entity_type}_gid',), None)}
+                {index_artwork_stmt((f'{entity_type}_gid',), None, 4)}
             END IF;
 
             RETURN OLD;
@@ -344,6 +356,7 @@ for project in PROJECTS:
                     WHERE {q_art_table}.{entity_type} = OLD.id
                 )
                 ON CONFLICT DO NOTHING;
+
                 {deindex_artwork_stmt('OLD.gid', 'NULL', 4)}
             END IF;
 
