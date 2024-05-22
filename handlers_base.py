@@ -51,7 +51,15 @@ class EventHandler:
         raise NotImplementedError
 
     @property
-    def entity_type(self):
+    def entity_schema(self):
+        raise NotImplementedError
+
+    @property
+    def entity_table(self):
+        raise NotImplementedError
+
+    @property
+    def entity_type_kebab(self):
         raise NotImplementedError
 
     @property
@@ -66,6 +74,10 @@ class EventHandler:
     @property
     def ia_collection(self):
         raise NotImplementedError
+
+    @property
+    def perform_checks(self):
+        return False
 
     @property
     def project_abbr(self):
@@ -120,10 +132,7 @@ class EventHandler:
     def fetch_image_rows(self, pg_conn, entity_gid):
         raise NotImplementedError
 
-    def index(self, pg_conn, event):
-        message = event['message']
-        gid = message['gid']
-
+    def build_index_json(self, pg_conn, gid):
         index_json_content = json.dumps({
             'images': [
                 self.build_image_json(gid, row)
@@ -131,14 +140,41 @@ class EventHandler:
             ],
             self.entity_type_kebab: self.build_canonical_entity_url(gid),
         }, sort_keys=True)
+        return index_json_content.encode('utf-8')
 
-        logging.debug('Produced %s', index_json_content)
+    def fetch_entity_metadata(self, gid):
+        entity_metadata_url = self.build_metadata_url(gid)
+        entity_metadata_headers = self.build_metadata_headers()
+        try:
+            entity_metadata_res = self.http_session.get(
+                entity_metadata_url,
+                headers=entity_metadata_headers,
+                stream=True,
+                timeout=REQUEST_TIMEOUT
+            )
+            entity_metadata_res.raise_for_status()
+        except HTTPError as exc:
+            logging.info('Fetch of %s failed', entity_metadata_url)
+            logging.error('Response text: %s', entity_metadata_res.text)
+            raise exc
+        return entity_metadata_res.content
+
+    def index(self, pg_conn, event):
+        message = event['message']
+        gid = message['gid']
+
+        encoded_index_json_content = \
+            message.get('encoded_index_json_content')
+        if encoded_index_json_content is None:
+            encoded_index_json_content = self.build_index_json(pg_conn, gid)
+
+        logging.debug('Produced %s', encoded_index_json_content)
 
         index_json_upload_url = self.build_s3_item_url(gid, 'index.json')
         try:
             index_json_upload_res = self.http_session.put(
                 index_json_upload_url,
-                data=index_json_content.encode('utf-8'),
+                data=encoded_index_json_content,
                 headers={
                     **self.build_authorization_header(),
                     'content-type': 'application/json; charset=UTF-8',
@@ -158,21 +194,6 @@ class EventHandler:
 
         logging.info('Upload of %s succeeded', index_json_upload_url)
 
-        entity_metadata_url = self.build_metadata_url(gid)
-        entity_metadata_headers = self.build_metadata_headers()
-        try:
-            entity_metadata_res = self.http_session.get(
-                entity_metadata_url,
-                headers=entity_metadata_headers,
-                stream=True,
-                timeout=REQUEST_TIMEOUT
-            )
-            entity_metadata_res.raise_for_status()
-        except HTTPError as exc:
-            logging.info('Fetch of %s failed', entity_metadata_url)
-            logging.error('Response text: %s', entity_metadata_res.text)
-            raise exc
-
         entity_metadata_upload_url = self.build_s3_item_url(
             gid,
             self.build_metadata_ia_filename(gid),
@@ -180,7 +201,7 @@ class EventHandler:
         try:
             entity_metadata_upload_res = self.http_session.put(
                 entity_metadata_upload_url,
-                data=entity_metadata_res.content,
+                data=self.fetch_entity_metadata(gid),
                 headers={
                     **self.build_authorization_header(),
                     'content-type': 'application/xml; charset=UTF-8',
@@ -198,6 +219,29 @@ class EventHandler:
             raise exc
 
         logging.info('Upload of %s succeeded', entity_metadata_upload_url)
+
+        if self.perform_checks:
+            pg_conn.execute(
+                sql.SQL(dedent('''
+                    INSERT INTO artwork_indexer.{last_checked_table}
+                        ({entity}, last_checked)
+                    VALUES (
+                        (
+                            SELECT id
+                            FROM musicbrainz.{entity}
+                            WHERE gid = %(gid)s
+                        ),
+                        NOW()
+                    )
+                    ON CONFLICT ({entity})
+                    DO UPDATE SET last_checked = NOW()
+                ''')).format(
+                    entity=sql.Identifier(self.entity_table),
+                    last_checked_table=sql.Identifier(
+                        self.entity_table + '_last_checked'),
+                ),
+                {'gid': gid},
+            )
 
     def copy_image(self, pg_conn, event):
         message = event['message']
@@ -405,7 +449,7 @@ class MusicBrainzEventHandler(EventHandler):
 
     def fetch_image_rows(self, pg_conn, mbid):
         schema = self.artwork_schema
-        entity_type = self.entity_type
+        entity_table = self.entity_table
 
         # Note: cover_art_archive.image_type is also used by the
         # event_art_archive schema.
@@ -417,7 +461,7 @@ class MusicBrainzEventHandler(EventHandler):
                 ORDER BY ordering
             ''')).format(
                 schema=sql.Identifier(schema),
-                entity=sql.Identifier(entity_type),
+                entity=sql.Identifier(entity_table),
             ),
             {'gid': mbid},
         ).fetchall()

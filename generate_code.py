@@ -432,12 +432,24 @@ for project in PROJECTS:
                 return '{art_schema}'
 
             @property
+            def artwork_table(self):
+                return '{art_table}'
+
+            @property
             def domain(self):
                 return '{project['domain']}'
 
             @property
-            def entity_type(self):
-                return '{entity_type}'
+            def entity_schema(self):
+                return '{entity_schema}'
+
+            @property
+            def entity_table(self):
+                return '{entity_table}'
+
+            @property
+            def entity_type_kebab(self):
+                return '{entity_type_kebab}'
 
             @property
             def entity_type_kebab(self):
@@ -446,6 +458,10 @@ for project in PROJECTS:
             @property
             def ia_collection(self):
                 return '{project['ia_collection']}'
+
+            @property
+            def perform_checks(self):
+                return {project['perform_checks']}
 
             @property
             def project_abbr(self):

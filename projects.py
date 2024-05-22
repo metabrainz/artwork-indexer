@@ -126,6 +126,7 @@ CAA_PROJECT = {
             'tg_ops': ('ins', 'del'),
         },
     ),
+    'perform_checks': True,
 }
 
 EAA_PROJECT = {
@@ -150,6 +151,7 @@ EAA_PROJECT = {
             'tg_ops': ('upd',),
         },
     ),
+    'perform_checks': False,
 }
 
 PROJECTS = (

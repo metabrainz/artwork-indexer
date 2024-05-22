@@ -68,14 +68,34 @@ CREATE TABLE artwork_indexer.event_failure_reason (
     created             TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
+-- The artwork-indexer will periodically check index.json and
+-- *_mb_metadata.xml files stored at the IA (when it has nothing else to do)
+-- and make sure they contain the expected data. The reason is that
+-- historically, there have been many issues with incorrect or malformed
+-- metadata (CAA-129).
+CREATE TABLE artwork_indexer.release_last_checked (
+    release             INTEGER,
+    last_checked        TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+
 ALTER TABLE artwork_indexer.event_queue
     ADD CONSTRAINT event_queue_pkey
     PRIMARY KEY (id);
+
+ALTER TABLE artwork_indexer.release_last_checked
+    ADD CONSTRAINT release_last_checked_pkey
+    PRIMARY KEY (release);
 
 ALTER TABLE artwork_indexer.event_failure_reason
     ADD CONSTRAINT event_failure_reason_fk_event
     FOREIGN KEY (event)
     REFERENCES artwork_indexer.event_queue(id)
+    ON DELETE CASCADE;
+
+ALTER TABLE artwork_indexer.release_last_checked
+    ADD CONSTRAINT release_last_checked_fk_release
+    FOREIGN KEY (release)
+    REFERENCES musicbrainz.release(id)
     ON DELETE CASCADE;
 
 --- MusicBrainz Server will sometimes publish the same message multiple
@@ -91,6 +111,9 @@ CREATE INDEX event_queue_idx_state_created
 
 CREATE INDEX event_failure_reason_idx_event
     ON artwork_indexer.event_failure_reason (event, created);
+
+CREATE INDEX release_last_checked_idx_last_checked
+    ON artwork_indexer.release_last_checked (last_checked);
 
 CREATE OR REPLACE FUNCTION artwork_indexer.b_upd_event_queue()
 RETURNS TRIGGER AS $$

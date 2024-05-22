@@ -32,6 +32,7 @@ import requests
 import sentry_sdk
 
 from handlers import EVENT_HANDLER_CLASSES
+from handlers_base import REQUEST_TIMEOUT
 from pg_conn_wrapper import PgConnWrapper
 
 # Maximum number of times we should try to handle an event
@@ -225,6 +226,111 @@ def run_event_handler(pg_conn, event, handler):
         '''), {'event_id': event['id']})
 
 
+def perform_entity_checks(pg_conn, handler):
+    if not handler.perform_checks:
+        return
+
+    entity_row = pg_conn.execute(
+        sql.SQL(dedent('''
+            SELECT e.gid
+            FROM {entity_schema}.{entity_table} e
+            JOIN {artwork_schema}.{artwork_table} a
+                ON a.{entity_table} = e.id
+            LEFT JOIN artwork_indexer.{last_checked_table} c
+                ON c.{entity_table} = a.{entity_table}
+            GROUP BY e.gid
+            ORDER BY
+                max(c.last_checked) NULLS FIRST,
+                max(a.date_uploaded),
+                e.gid
+            LIMIT 1
+        ''')).format(
+            artwork_schema=sql.Identifer(handler.artwork_schema),
+            artwork_table=sql.Identifer(handler.artwork_table),
+            entity_schema=sql.Identifier(handler.entity_schema),
+            entity_table=sql.Identifer(handler.entity_table),
+            last_checked_table=sql.Identifer(
+                handler.entity_table + '_last_checked',
+            ),
+        )).fetchone()
+
+    if not entity_row:
+        return
+
+    entity_gid = entity_row['gid']
+    should_reindex = False
+
+    logging.info('Performing consistency checks for %s/%s',
+                 handler.entity_type_kebab,
+                 entity_gid)
+
+    encoded_index_json_content = \
+        handler.build_index_json(pg_conn, entity_gid)
+
+    archived_index_json_url = 'https://{domain}/{subpath}/{gid}'.format(
+        domain=handler.domain,
+        subpath=handler.entity_type_kebab,
+        gid=entity_gid,
+    )
+    archived_index_json_res = self.http_session.get(
+        index_json_url,
+        stream=True,
+        timeout=REQUEST_TIMEOUT,
+    )
+    archived_index_json_res.raise_for_status()
+
+    if encoded_index_json_content == archived_index_json_res.content:
+        logging.info('Good index.json file for %s/%s',
+                     handler.entity_type_kebab,
+                     entity_gid)
+
+        encoded_metadata_content = handler.fetch_entity_metadata(entity_gid)
+
+        archived_metadata_url =
+            'https://archive.org/download/{bucket}/{file}'.format(
+                bucket=handler.build_bucket_name(entity_gid),
+                file=handler.build_metadata_ia_filename(entity_gid),
+            )
+        archived_metadata_res = self.http_session.get(
+            archived_metadata_url,
+            stream=True,
+            timeout=REQUEST_TIMEOUT,
+        )
+        archived_metadata_res.raise_for_status()
+
+        if encoded_metadata_content == archived_metadata_res.content:
+            logging.info('Good XML metadata for %s/%s',
+                         handler.entity_type_kebab,
+                         entity_gid)
+        else:
+            logging.info('Bad XML metadata for %s/%s; reindexing',
+                         handler.entity_type_kebab,
+                         entity_gid)
+            should_reindex = True
+    else:
+        logging.info('Bad index.json file for %s/%s; reindexing',
+                     handler.entity_type_kebab,
+                     entity_gid)
+        should_reindex = True
+
+    if should_reindex:
+        current_datetime = datetime.datetime.now()
+        handler.index(pg_conn, {
+            'id': None,
+            'state': 'running',
+            'entity_type': handler.entity_table,
+            'action': 'index',
+            'message': {
+                'encoded_index_json_content': encoded_index_json_content,
+                'gid': entity_gid,
+            },
+            'depends_on': None,
+            'created': current_datetime,
+            'attempts': 0,
+            'last_updated': current_datetime,
+        })
+
+
 def indexer(
     config,
     pg_conn,
@@ -274,6 +380,14 @@ def indexer(
             idle_loops += 1
             if idle_loops >= max_idle_loops:
                 break
+
+            # We also have a chance to check for incorrect or malformed
+            # index.json files.
+            for handler in event_handler_map.values():
+                try:
+                    perform_entity_checks(pg_conn, handler)
+                except BaseException as task_exc:
+                    pass
 
             if sleep_amount < maxwait:
                 sleep_amount = min(sleep_amount * 2, maxwait)
