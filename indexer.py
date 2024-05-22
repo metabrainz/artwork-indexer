@@ -98,9 +98,10 @@ def handle_event_failure(pg_conn, event, error):
         VALUES (%(event_id)s, %(error)s)
     '''), {'event_id': event['id'], 'error': str(error)})
 
-    pg_conn.commit()
-
-    sentry_sdk.capture_exception(error)
+    try:
+        sentry_sdk.capture_exception(error)
+    except BaseException as sentry_exc:
+        logging.error(sentry_exc)
 
 
 def cleanup_events(pg_conn):
@@ -193,7 +194,6 @@ def run_event_handler(pg_conn, event, handler):
             SET state = 'completed'
             WHERE id = %(event_id)s
         '''), {'event_id': event['id']})
-        pg_conn.commit()
 
 
 def indexer(
@@ -230,6 +230,9 @@ def indexer(
             sleep_amount = 1
             idle_loops = 0
         else:
+            # Close the transaction opened by `get_next_event`.
+            pg_conn.commit()
+
             # Since there's nothing else to do, cleanup old events
             # (but not too often).
             current_datetime = datetime.datetime.now()
@@ -253,6 +256,9 @@ def indexer(
             continue
 
         if event['state'] != 'queued':
+            # Close the transaction opened by `get_next_event`.
+            pg_conn.commit()
+
             # This is mainly a development aid.  In at least one
             # occasion I broke the SQL query above by having bad
             # boolean operator precedence.  -- mwiencek
@@ -280,6 +286,7 @@ def indexer(
             event,
             handler,
         )
+        pg_conn.commit()
 
     pg_conn.close()
 
