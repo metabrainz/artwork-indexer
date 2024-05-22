@@ -266,14 +266,12 @@ def indexer(
 
         logging.info('Processing event %s', event)
 
-        pg_conn.execute(dedent('''
+        pg_conn.execute_and_commit(dedent('''
             UPDATE artwork_indexer.event_queue
             SET state = 'running',
                 attempts = attempts + 1
             WHERE id = %(event_id)s
         '''), {'event_id': event['id']})
-
-        pg_conn.commit()
 
         handler = event_handler_map[event['entity_type']]
 
