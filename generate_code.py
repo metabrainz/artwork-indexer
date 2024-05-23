@@ -443,6 +443,10 @@ for project in PROJECTS:
                 return '{project['ia_collection']}'
 
             @property
+            def project_abbr(self):
+                return '{project['abbr']}'
+
+            @property
             def ws_inc_params(self):
                 return '{project['ws_inc_params']}'
 

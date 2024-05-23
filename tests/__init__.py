@@ -21,12 +21,13 @@ MBS_TEST_URL = tests_config['musicbrainz']['url']
 
 def image_copy_put(
         project, source_mbid, target_mbid, image_id):
+    abbr = project['abbr']
     return {
         'method': 'PUT',
         'url': f'http://mbid-{target_mbid}.s3.example.com/' +
                f'mbid-{target_mbid}-{image_id}.jpg',
         'headers': {
-            'authorization': 'LOW user:pass',
+            'authorization': f'LOW {abbr}_user:{abbr}_pass',
             'x-amz-copy-source': f'/mbid-{source_mbid}/' +
                                  f'mbid-{source_mbid}-{image_id}.jpg',
             'x-archive-auto-make-bucket': '1',
@@ -51,6 +52,7 @@ def index_event(mbid, **kwargs):
 
 
 def index_json_put(project, mbid, images):
+    abbr = project['abbr']
     entity_type = project['entity_table']
     image_loc = f"https://{project['domain']}/{entity_type}/{mbid}"
 
@@ -58,7 +60,7 @@ def index_json_put(project, mbid, images):
         'method': 'PUT',
         'url': f'http://mbid-{mbid}.s3.example.com/index.json',
         'headers': {
-            'authorization': 'LOW user:pass',
+            'authorization': f'LOW {abbr}_user:{abbr}_pass',
             'content-type': 'application/json; charset=UTF-8',
             'x-archive-auto-make-bucket': '1',
             'x-archive-keep-old-version': '1',
@@ -97,12 +99,13 @@ def mb_metadata_xml_get(project, mbid):
 
 
 def mb_metadata_xml_put(project, mbid, xml):
+    abbr = project['abbr']
     return {
         'method': 'PUT',
         'url': f'http://mbid-{mbid}.s3.example.com/' +
                f'mbid-{mbid}_mb_metadata.xml',
         'headers': {
-            'authorization': 'LOW user:pass',
+            'authorization': f'LOW {abbr}_user:{abbr}_pass',
             'content-type': 'application/xml; charset=UTF-8',
             'x-archive-auto-make-bucket': '1',
             'x-archive-meta-collection': project['ia_collection'],

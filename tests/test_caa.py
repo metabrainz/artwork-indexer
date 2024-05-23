@@ -311,7 +311,7 @@ class TestCoverArtArchive(TestArtArchive):
                        f'mbid-{RELEASE1_MBID}-1.jpg',
                 'data': None,
                 'headers': {
-                    'authorization': 'LOW user:pass',
+                    'authorization': 'LOW caa_user:caa_pass',
                     'x-archive-cascade-delete': '1',
                     'x-archive-keep-old-version': '1',
                 },
@@ -533,7 +533,7 @@ class TestCoverArtArchive(TestArtArchive):
                        f'mbid-{RELEASE1_MBID}-1.jpg',
                 'data': None,
                 'headers': {
-                    'authorization': 'LOW user:pass',
+                    'authorization': 'LOW caa_user:caa_pass',
                     'x-archive-cascade-delete': '1',
                     'x-archive-keep-old-version': '1',
                 },
@@ -546,7 +546,7 @@ class TestCoverArtArchive(TestArtArchive):
                 'url': f'http://mbid-{RELEASE1_MBID}.s3.example.com/' +
                        'index.json',
                 'headers': {
-                    'authorization': 'LOW user:pass',
+                    'authorization': 'LOW caa_user:caa_pass',
                     'x-archive-keep-old-version': '1',
                     'x-archive-cascade-delete': '1',
                 },
