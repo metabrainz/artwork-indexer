@@ -66,12 +66,17 @@ class EventHandler:
     def ia_collection(self):
         raise NotImplementedError
 
+    @property
+    def project_abbr(self):
+        raise NotImplementedError
+
     def build_authorization_header(self):
+        abbr = self.project_abbr
         s3_conf = self.config['s3']
         return {
             'authorization': 'LOW %s:%s' % (
-                s3_conf['access'],
-                s3_conf['secret'],
+                s3_conf[abbr + '_access'],
+                s3_conf[abbr + '_secret'],
             ),
         }
 

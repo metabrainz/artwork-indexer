@@ -249,7 +249,7 @@ class TestEventArtArchive(TestArtArchive):
                        f'mbid-{EVENT1_MBID}-1.jpg',
                 'data': None,
                 'headers': {
-                    'authorization': 'LOW user:pass',
+                    'authorization': 'LOW eaa_user:eaa_pass',
                     'x-archive-cascade-delete': '1',
                     'x-archive-keep-old-version': '1',
                 },
@@ -427,7 +427,7 @@ class TestEventArtArchive(TestArtArchive):
                        f'mbid-{EVENT1_MBID}-1.jpg',
                 'data': None,
                 'headers': {
-                    'authorization': 'LOW user:pass',
+                    'authorization': 'LOW eaa_user:eaa_pass',
                     'x-archive-cascade-delete': '1',
                     'x-archive-keep-old-version': '1',
                 },
@@ -442,7 +442,7 @@ class TestEventArtArchive(TestArtArchive):
                 'method': 'DELETE',
                 'url': f'http://mbid-{EVENT1_MBID}.s3.example.com/index.json',
                 'headers': {
-                    'authorization': 'LOW user:pass',
+                    'authorization': 'LOW eaa_user:eaa_pass',
                     'x-archive-keep-old-version': '1',
                     'x-archive-cascade-delete': '1',
                 },

@@ -22,6 +22,10 @@ class ReleaseEventHandler(MusicBrainzEventHandler):
         return 'coverartarchive'
 
     @property
+    def project_abbr(self):
+        return 'caa'
+
+    @property
     def ws_inc_params(self):
         return 'artists'
 
@@ -43,6 +47,10 @@ class EventEventHandler(MusicBrainzEventHandler):
     @property
     def ia_collection(self):
         return 'eventartarchive'
+
+    @property
+    def project_abbr(self):
+        return 'eaa'
 
     @property
     def ws_inc_params(self):
