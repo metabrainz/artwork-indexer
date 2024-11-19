@@ -19,3 +19,6 @@ caa_access={{ keyOrDefault (print $key_prefix "caa_s3_access_key") "" }}
 caa_secret={{ keyOrDefault (print $key_prefix "caa_s3_secret_key") "" }}
 eaa_access={{ keyOrDefault (print $key_prefix "eaa_s3_access_key") "" }}
 eaa_secret={{ keyOrDefault (print $key_prefix "eaa_s3_secret_key") "" }}
+
+[sentry]
+dsn={{ keyOrDefault (print $key_prefix "sentry_dsn") "" }}
