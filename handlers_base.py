@@ -21,6 +21,7 @@ import json
 import time
 
 from psycopg import sql
+from requests.exceptions import HTTPError
 from textwrap import dedent
 import urllib.parse
 
@@ -134,48 +135,67 @@ class EventHandler:
         logging.debug('Produced %s', index_json_content)
 
         index_json_upload_url = self.build_s3_item_url(gid, 'index.json')
-        self.http_session.put(
-            index_json_upload_url,
-            data=index_json_content.encode('utf-8'),
-            headers={
-                **self.build_authorization_header(),
-                'content-type': 'application/json; charset=UTF-8',
-                'x-archive-auto-make-bucket': '1',
-                'x-archive-keep-old-version': '1',
-                'x-archive-meta-collection': self.ia_collection,
-                'x-archive-meta-mediatype': 'image',
-                'x-archive-meta-noindex': 'true',
-            },
-            timeout=REQUEST_TIMEOUT
-        ).raise_for_status()
+        try:
+            index_json_upload_res = self.http_session.put(
+                index_json_upload_url,
+                data=index_json_content.encode('utf-8'),
+                headers={
+                    **self.build_authorization_header(),
+                    'content-type': 'application/json; charset=UTF-8',
+                    'x-archive-auto-make-bucket': '1',
+                    'x-archive-keep-old-version': '1',
+                    'x-archive-meta-collection': self.ia_collection,
+                    'x-archive-meta-mediatype': 'image',
+                    'x-archive-meta-noindex': 'true',
+                },
+                timeout=REQUEST_TIMEOUT
+            )
+            index_json_upload_res.raise_for_status()
+        except HTTPError as exc:
+            logging.info('Upload of %s failed', index_json_upload_url)
+            logging.error('Response text: %s', index_json_upload_res.text)
+            raise exc
 
         logging.info('Upload of %s succeeded', index_json_upload_url)
 
         entity_metadata_url = self.build_metadata_url(gid)
         entity_metadata_headers = self.build_metadata_headers()
-        metadata_res = self.http_session.get(entity_metadata_url,
-                                             headers=entity_metadata_headers,
-                                             stream=True,
-                                             timeout=REQUEST_TIMEOUT)
-        metadata_res.raise_for_status()
+        try:
+            entity_metadata_res = self.http_session.get(
+                entity_metadata_url,
+                headers=entity_metadata_headers,
+                stream=True,
+                timeout=REQUEST_TIMEOUT
+            )
+            entity_metadata_res.raise_for_status()
+        except HTTPError as exc:
+            logging.info('Fetch of %s failed', entity_metadata_url)
+            logging.error('Response text: %s', entity_metadata_res.text)
+            raise exc
 
         entity_metadata_upload_url = self.build_s3_item_url(
             gid,
             self.build_metadata_ia_filename(gid),
         )
-        self.http_session.put(
-            entity_metadata_upload_url,
-            data=metadata_res.content,
-            headers={
-                **self.build_authorization_header(),
-                'content-type': 'application/xml; charset=UTF-8',
-                'x-archive-auto-make-bucket': '1',
-                'x-archive-meta-collection': self.ia_collection,
-                'x-archive-meta-mediatype': 'image',
-                'x-archive-meta-noindex': 'true',
-            },
-            timeout=REQUEST_TIMEOUT
-        ).raise_for_status()
+        try:
+            entity_metadata_upload_res = self.http_session.put(
+                entity_metadata_upload_url,
+                data=entity_metadata_res.content,
+                headers={
+                    **self.build_authorization_header(),
+                    'content-type': 'application/xml; charset=UTF-8',
+                    'x-archive-auto-make-bucket': '1',
+                    'x-archive-meta-collection': self.ia_collection,
+                    'x-archive-meta-mediatype': 'image',
+                    'x-archive-meta-noindex': 'true',
+                },
+                timeout=REQUEST_TIMEOUT
+            )
+            entity_metadata_upload_res.raise_for_status()
+        except HTTPError as exc:
+            logging.info('Upload of %s failed', entity_metadata_upload_url)
+            logging.error('Response text: %s', entity_metadata_upload_res.text)
+            raise exc
 
         logging.info('Upload of %s succeeded', entity_metadata_upload_url)
 
@@ -207,19 +227,26 @@ class EventHandler:
 
         # Copy the image to the new MBID. (The old image will be deleted by a
         # subsequent and dependant `delete_image` event.)
-        self.http_session.put(
-            target_url,
-            headers={
-                **self.build_authorization_header(),
-                'x-amz-copy-source': source_file_path,
-                'x-archive-auto-make-bucket': '1',
-                'x-archive-keep-old-version': '1',
-                'x-archive-meta-collection': self.ia_collection,
-                'x-archive-meta-mediatype': 'image',
-                'x-archive-meta-noindex': 'true',
-            },
-            timeout=REQUEST_TIMEOUT
-        ).raise_for_status()
+        try:
+            copy_res = self.http_session.put(
+                target_url,
+                headers={
+                    **self.build_authorization_header(),
+                    'x-amz-copy-source': source_file_path,
+                    'x-archive-auto-make-bucket': '1',
+                    'x-archive-keep-old-version': '1',
+                    'x-archive-meta-collection': self.ia_collection,
+                    'x-archive-meta-mediatype': 'image',
+                    'x-archive-meta-noindex': 'true',
+                },
+                timeout=REQUEST_TIMEOUT
+            )
+            copy_res.raise_for_status()
+        except HTTPError as exc:
+            logging.info('Copy from %s to %s failed',
+                         source_file_path, target_url)
+            logging.error('Response text: %s', copy_res.text)
+            raise exc
 
         logging.info('Copy from %s to %s succeeded',
                      source_file_path, target_url)
@@ -266,15 +293,21 @@ class EventHandler:
 
         # Note: This request should succeed (204) even if the file
         # no longer exists.
-        self.http_session.delete(
-            target_url,
-            headers={
-                **self.build_authorization_header(),
-                'x-archive-keep-old-version': '1',
-                'x-archive-cascade-delete': '1',
-            },
-            timeout=REQUEST_TIMEOUT
-        ).raise_for_status()
+        try:
+            delete_res = self.http_session.delete(
+                target_url,
+                headers={
+                    **self.build_authorization_header(),
+                    'x-archive-keep-old-version': '1',
+                    'x-archive-cascade-delete': '1',
+                },
+                timeout=REQUEST_TIMEOUT
+            )
+            delete_res.raise_for_status()
+        except HTTPError as exc:
+            logging.info('Deletion of %s failed', target_url)
+            logging.error('Response text: %s', delete_res.text)
+            raise exc
 
         logging.info('Deletion of %s succeeded', target_url)
 
@@ -286,15 +319,21 @@ class EventHandler:
 
         # Note: This request should succeed (204) even if the file
         # no longer exists.
-        self.http_session.delete(
-            target_url,
-            headers={
-                **self.build_authorization_header(),
-                'x-archive-keep-old-version': '1',
-                'x-archive-cascade-delete': '1',
-            },
-            timeout=REQUEST_TIMEOUT
-        ).raise_for_status()
+        try:
+            deindex_res = self.http_session.delete(
+                target_url,
+                headers={
+                    **self.build_authorization_header(),
+                    'x-archive-keep-old-version': '1',
+                    'x-archive-cascade-delete': '1',
+                },
+                timeout=REQUEST_TIMEOUT
+            )
+            deindex_res.raise_for_status()
+        except HTTPError as exc:
+            logging.info('Deletion of %s failed', target_url)
+            logging.error('Response text: %s', deindex_res.text)
+            raise exc
 
         logging.info('Deletion of %s succeeded', target_url)
 
