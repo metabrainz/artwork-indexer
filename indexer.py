@@ -166,10 +166,7 @@ def get_next_event(pg_conn):
         AND (eq.depends_on IS NULL OR NOT EXISTS (
             SELECT TRUE
             FROM artwork_indexer.event_queue parent_eq
-            WHERE array_position(
-                eq.depends_on,
-                parent_eq.id
-            ) IS NOT NULL
+            WHERE parent_eq.id = any(eq.depends_on)
             AND parent_eq.state != 'completed'
         ))
         ORDER BY created, id
