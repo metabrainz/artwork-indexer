@@ -98,6 +98,38 @@ def handle_event_failure(pg_conn, event, error):
         VALUES (%(event_id)s, %(error)s)
     '''), {'event_id': event['id'], 'error': str(error)})
 
+    # If the event failed, mark any dependent events as failed, too.
+    pg_conn.execute_with_retry(dedent('''
+        WITH RECURSIVE descendants AS (
+            SELECT child.id, child.depends_on
+            FROM artwork_indexer.event_queue child
+            JOIN artwork_indexer.event_queue parent
+            ON (parent.id = any(child.depends_on)
+                AND parent.id = %(event_id)s
+                AND parent.state = 'failed')
+            UNION ALL
+            SELECT child.id, child.depends_on
+            FROM artwork_indexer.event_queue child
+            JOIN descendants parent
+            ON parent.id = any(child.depends_on)
+        ),
+        updates AS (
+            UPDATE artwork_indexer.event_queue
+            SET state = 'failed'
+            WHERE id IN (SELECT id FROM descendants)
+            RETURNING id
+        )
+        INSERT INTO artwork_indexer.event_failure_reason
+            (event, failure_reason)
+        SELECT id, %(failure_reason)s
+        FROM updates
+    '''), {
+        'event_id': event['id'],
+        'failure_reason': 'This event was marked as failed because '
+                          f'an event it depended on ({event['id']}) '
+                          'had failed.',
+    })
+
     try:
         sentry_sdk.capture_exception(error)
     except BaseException as sentry_exc:

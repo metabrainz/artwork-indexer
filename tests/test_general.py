@@ -98,8 +98,12 @@ class TestGeneral(TestArtArchive):
     def test_failure(self):
         self.pg_conn.execute_and_commit(dedent('''
             INSERT INTO artwork_indexer.event_queue
-                    (id, entity_type, action, message, created)
-                 VALUES (1, 'release', 'noop', '{"fail": true}',
+                    (id, entity_type, action, message, depends_on, created)
+                 VALUES (1, 'release', 'noop', '{"fail": true}', NULL,
+                         NOW() - interval '1 day'),
+                        (2, 'release', 'noop', '{"id": 2}', '{1}',
+                         NOW() - interval '1 day'),
+                        (3, 'release', 'noop', '{"id": 3}', '{2}',
                          NOW() - interval '1 day');
         '''))
 
@@ -116,10 +120,11 @@ class TestGeneral(TestArtArchive):
                             http_client_cls=self.http_client_cls)
 
             pg_cur = self.pg_conn.execute(
-                'SELECT * FROM artwork_indexer.event_queue WHERE id = 1;'
+                'SELECT * FROM artwork_indexer.event_queue '
+                'WHERE id IN (1, 2, 3) ORDER BY id'
             )
-            event = pg_cur.fetchone()
-            attempts = event['attempts']
+            event1, event2, event3 = pg_cur.fetchall()
+            attempts = event1['attempts']
 
             self.assertEqual(attempts, index + 1)
 
@@ -133,9 +138,30 @@ class TestGeneral(TestArtArchive):
             self.assertEqual(failure_reason_count, index + 1)
 
             if attempts < indexer.MAX_ATTEMPTS:
-                self.assertEqual(event['state'], 'queued')
+                self.assertEqual(event1['state'], 'queued')
+                self.assertEqual(event2['state'], 'queued')
+                self.assertEqual(event3['state'], 'queued')
             else:
-                self.assertEqual(event['state'], 'failed')
+                self.assertEqual(event1['state'], 'failed')
+                self.assertEqual(event2['state'], 'failed')
+                self.assertEqual(event3['state'], 'failed')
+                event2_failure_reason, event3_failure_reason = \
+                    self.pg_conn.execute(dedent('''
+                        SELECT failure_reason
+                          FROM artwork_indexer.event_failure_reason
+                         WHERE event IN (2, 3)
+                         ORDER BY event
+                    ''')).fetchall()
+                self.assertEqual(
+                    event2_failure_reason['failure_reason'],
+                    'This event was marked as failed because an event it ' +
+                    'depended on (1) had failed.',
+                )
+                self.assertEqual(
+                    event3_failure_reason['failure_reason'],
+                    'This event was marked as failed because an event it ' +
+                    'depended on (1) had failed.',
+                )
 
         # Should not return the failed event.
         self.assertEqual(indexer.get_next_event(self.pg_conn), None)

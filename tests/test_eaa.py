@@ -361,7 +361,7 @@ class TestEventArtArchive(TestArtArchive):
             },
             {
                 'id': 6,
-                'state': 'queued',
+                'state': 'failed',
                 'entity_type': 'event',
                 'action': 'delete_image',
                 'message': {
@@ -372,10 +372,11 @@ class TestEventArtArchive(TestArtArchive):
                 'depends_on': [5],
                 'attempts': 0,
             },
-            event_index_event(EVENT2_MBID, id=7, depends_on=[6]),
+            event_index_event(EVENT2_MBID, id=7, depends_on=[6],
+                              state='failed'),
             {
                 'id': 8,
-                'state': 'queued',
+                'state': 'failed',
                 'entity_type': 'event',
                 'action': 'deindex',
                 'message': {'gid': EVENT1_MBID},
@@ -393,6 +394,17 @@ class TestEventArtArchive(TestArtArchive):
             'HTTP 400',
         )
 
+        for event_id in (6, 7, 8):
+            self.assertEqual(
+                self.pg_conn.execute(dedent('''
+                    SELECT failure_reason
+                    FROM artwork_indexer.event_failure_reason
+                    WHERE event = %(event_id)s
+                '''), {'event_id': event_id}).fetchone()['failure_reason'],
+                'This event was marked as failed because an event it '
+                'depended on (5) had failed.',
+            )
+
         self.assertEqual(self.session.last_requests, [
             event_image_copy_put(EVENT1_MBID, EVENT2_MBID, 1),
         ])
@@ -402,7 +414,7 @@ class TestEventArtArchive(TestArtArchive):
         self.pg_conn.execute_and_commit(dedent('''
             UPDATE artwork_indexer.event_queue
             SET attempts = 0, state = 'queued'
-            WHERE action = 'copy_image'
+            WHERE id IN (5, 6, 7, 8)
         '''))
 
         self.session.last_requests = []
