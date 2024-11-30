@@ -32,19 +32,18 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: "3.12"
+    - name: Add ~/.local/bin to PATH
+      run: echo "PATH=$HOME/.local/bin:$PATH" >> $GITHUB_ENV
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
-        python -m venv .venv
-        . .venv/bin/activate
-        pip install -r requirements.txt
+        python -m pip install --user 'pipx==1.7.1'
+        pipx install 'poetry==1.8.3'
+        poetry install
     - name: Run flake8
       run: |
-        . .venv/bin/activate
-        flake8 *.py tests/*.py --count --show-source --statistics
+        poetry run flake8 *.py tests/*.py --count --show-source --statistics
     - name: Run tests
       run: |
-        . .venv/bin/activate
         cp config.tests.example.ini config.tests.ini
         export PGHOST=localhost
         export PGPORT=5432

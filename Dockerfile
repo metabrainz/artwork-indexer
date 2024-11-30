@@ -4,7 +4,7 @@ RUN useradd --create-home --shell /bin/bash art
 
 WORKDIR /home/art/artwork-indexer
 
-COPY --chown=art:art requirements.txt ./
+COPY --chown=art:art pyproject.toml poetry.lock ./
 
 RUN chown art:art /home/art/artwork-indexer && \
     apt-get update && \
@@ -12,11 +12,15 @@ RUN chown art:art /home/art/artwork-indexer && \
         --no-install-recommends \
         --no-install-suggests \
         -y \
-        build-essential \
+        # build-essential \
         sudo && \
-    pip install --upgrade pip && \
-    sudo -E -H -u art pip install --user -r requirements.txt && \
-    apt-get purge --auto-remove -y build-essential && \
+    # Explicit references to /usr/local/bin/python are used in case the
+    # Ubuntu-packaged Python 3.10 is temporarily installed via
+    # build-essential.
+    sudo -E -H -u art /usr/local/bin/python -m pip install --user --no-warn-script-location 'pipx==1.7.1' && \
+    sudo -E -H -u art env PATH="/home/art/.local/bin:$PATH" pipx install --python /usr/local/bin/python 'poetry==1.8.3' && \
+    sudo -E -H -u art env PATH="/home/art/.local/bin:$PATH" poetry install && \
+    # apt-get purge --auto-remove -y build-essential && \
     rm -rf /var/lib/apt/lists/*
 
 COPY --chown=art:art \

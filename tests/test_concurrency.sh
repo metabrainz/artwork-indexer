@@ -12,7 +12,7 @@ EOF
 psql -U musicbrainz -d musicbrainz_test_artwork_indexer -c "$SQL" -q > /dev/null
 
 run_indexer() {
-    python indexer.py \
+    poetry run python indexer.py \
         --max-wait=1 \
         --max-idle-loops=1 \
         --config=config.tests.ini 2>&1
