@@ -13,4 +13,4 @@ fi
 $DROPDB_COMMAND --if-exists musicbrainz_test_artwork_indexer
 createdb -O musicbrainz -T musicbrainz_test -U "$POSTGRES_SUPERUSER" musicbrainz_test_artwork_indexer
 
-python indexer.py --config=config.tests.ini --setup-schema
+poetry run python indexer.py --config=config.tests.ini --setup-schema
