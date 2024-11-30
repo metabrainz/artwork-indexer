@@ -1,4 +1,4 @@
-FROM metabrainz/python:3.11-20231006
+FROM metabrainz/python:3.12-20241130
 
 RUN useradd --create-home --shell /bin/bash art
 
