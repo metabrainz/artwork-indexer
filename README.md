@@ -16,6 +16,7 @@ Succesor to the old, Perl-and-RabbitMQ-based
 ## Requirements
 
   * Python >= 3.12
+  * [Poetry](https://python-poetry.org/) >= 1.8.0
   * PostgreSQL >= 12
 
 You will need a MusicBrainz database. See the `INSTALL.md` document of the
@@ -24,18 +25,11 @@ project for more details.
 
 ## Installation
 
-  1. Create a [virtual environment](https://docs.python.org/3/library/venv.html)
-     and activate it. For example:
+  1. Install project dependencies with `poetry`:
 
       ```sh
-      python3 -m venv .venv
-      . .venv/bin/activate.fish  # I use fish shell
+      poetry install
       ```
-
-  2. Install dependencies:
-       ```sh
-       pip install -r requirements.txt
-       ```
 
   3. Copy `config.default.ini` to `config.ini` and edit appropriately.
 
@@ -43,12 +37,12 @@ project for more details.
      triggers. (This will use the database configured in `config.ini`.)
 
        ```sh
-       python indexer.py --setup-schema
+       poetry run python indexer.py --setup-schema
        ```
 
   5. Run `indexer.py`:
        ```sh
-       python indexer.py
+       poetry run python indexer.py
        ```
 
 ## Testing

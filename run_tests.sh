@@ -9,4 +9,4 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 ./tests/test_concurrency.sh
 ./tests/test_signals.sh
 
-exec coverage run -m unittest discover . "test_*.py"
+exec poetry run coverage run -m unittest discover . "test_*.py"
