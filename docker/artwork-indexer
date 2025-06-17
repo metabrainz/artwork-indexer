@@ -2,6 +2,6 @@
 
 cd /home/art/artwork-indexer
 
-export PATH="/home/art/.local/bin:$PATH"
-
-exec sudo -E -H -u art poetry run python indexer.py
+exec sudo -E -H -u art \
+    env PATH="/home/art/.local/bin:$PATH" \
+    poetry run python indexer.py
