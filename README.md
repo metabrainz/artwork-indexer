@@ -15,7 +15,7 @@ Succesor to the old, Perl-and-RabbitMQ-based
 
 ## Requirements
 
-  * Python >= 3.12
+  * Python >= 3.13
   * [Poetry](https://python-poetry.org/) >= 1.8.0
   * PostgreSQL >= 12
 
