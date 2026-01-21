@@ -215,7 +215,7 @@ def run_event_handler(pg_conn, event, handler):
         handle_event_failure(pg_conn, event, task_exc)
     else:
         logging.info(
-            'Event id=%s completed succesfully',
+            'Event id=%s completed successfully',
             event['id'],
         )
         pg_conn.execute_with_retry(dedent('''

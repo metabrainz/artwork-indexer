@@ -10,7 +10,7 @@ We support indexing
 [Cover Art Archive](http://coverartarchive.org) and
 [events](https://wiki.musicbrainz.org/Event) for the Event Art Archive.
 
-Succesor to the old, Perl-and-RabbitMQ-based
+Successor to the old, Perl-and-RabbitMQ-based
 [CAA-indexer](https://github.com/metabrainz/CAA-indexer).
 
 ## Requirements
@@ -31,16 +31,16 @@ project for more details.
       poetry install
       ```
 
-  3. Copy `config.default.ini` to `config.ini` and edit appropriately.
+  2. Copy `config.default.ini` to `config.ini` and edit appropriately.
 
-  4. Install the `artwork_indexer` schema, plus associated functions and
+  3. Install the `artwork_indexer` schema, plus associated functions and
      triggers. (This will use the database configured in `config.ini`.)
 
        ```sh
        poetry run python indexer.py --setup-schema
        ```
 
-  5. Run `indexer.py`:
+  4. Run `indexer.py`:
        ```sh
        poetry run python indexer.py
        ```
@@ -97,7 +97,102 @@ musicbrainz_db=> SELECT q.*, string_agg(fr.failure_reason, E'\n')
 These must be cleaned up by hand once they're no longer needed (i.e., after
 the underlying issue is determined and resolved).
 
+## Troubleshooting
+
+### Database Connection Issues
+
+**Problem**: `psycopg.OperationalError` when starting the indexer
+
+**Solutions**:
+- Verify PostgreSQL is running: `pg_isready -h localhost -p 5432`
+- Check database credentials in `config.ini`
+- Ensure the MusicBrainz database exists and is accessible
+- Check PostgreSQL logs for authentication errors
+
+### Schema Installation Fails
+
+**Problem**: Error when running `--setup-schema`
+
+**Solutions**:
+- Ensure the `artwork_indexer` schema doesn't already exist
+- Drop existing schema: `DROP SCHEMA IF EXISTS artwork_indexer CASCADE;`
+- Verify you have sufficient permissions on the database
+- Check that SQL files in `sql/` directory are present
+
+### Events Stuck in 'queued' State
+
+**Problem**: Events remain queued but never process
+
+**Solutions**:
+- Check if indexer is running: `ps aux | grep indexer.py`
+- Verify events aren't waiting on dependencies:
+  ```sql
+  SELECT * FROM artwork_indexer.event_queue
+  WHERE state = 'queued' AND depends_on IS NOT NULL;
+  ```
+- Check for events that have reached max attempts (5):
+  ```sql
+  SELECT * FROM artwork_indexer.event_queue
+  WHERE state = 'queued' AND attempts >= 5;
+  ```
+
+### S3/Internet Archive Upload Failures
+
+**Problem**: HTTP errors when uploading to Internet Archive
+
+**Solutions**:
+- Verify S3 credentials in `config.ini` (`caa_access`, `caa_secret`, etc.)
+- Check network connectivity to `s3.us.archive.org`
+- Check rate limiting: wait a few minutes and retry
+- Verify bucket naming format: `mbid-{uuid}` or `ebid-{uuid}`
+
+### Failed Events Keep Accumulating
+
+**Problem**: Many events in 'failed' state
+
+**Solutions**:
+- Inspect failure reasons:
+  ```sql
+  SELECT q.*, string_agg(fr.failure_reason, E'\n')
+  FROM artwork_indexer.event_queue q
+  JOIN artwork_indexer.event_failure_reason fr ON fr.event = q.id
+  WHERE q.state = 'failed'
+  GROUP BY q.id;
+  ```
+- Fix underlying issue (credentials, network, etc.)
+- Manually requeue after fixing:
+  ```sql
+  UPDATE artwork_indexer.event_queue
+  SET state = 'queued', attempts = 0
+  WHERE id = <event_id>;
+  ```
+
+### Sentry Not Receiving Errors
+
+**Problem**: Errors not appearing in Sentry
+
+**Solutions**:
+- Verify `dsn` is set in the `[sentry]` section of `config.ini`
+- Test Sentry DSN: `curl -X POST <sentry_dsn>`
+- Check indexer logs for Sentry connection errors
+- Ensure Sentry SDK version is compatible
+
+### Performance Issues
+
+**Problem**: Indexer running slowly
+
+**Solutions**:
+- Check PostgreSQL query performance with `EXPLAIN ANALYZE`
+- Verify network latency to Internet Archive
+- Monitor idle loop frequency in logs
+- Reduce `--max-wait` value for more frequent polling
+- Check for database locks:
+  ```sql
+  SELECT * FROM pg_locks WHERE NOT granted;
+  ```
+
 ## Hacking
+
 
 There are two primary tasks of the artwork-indexer:
 
@@ -144,5 +239,5 @@ be monitored and dealt with manually. All errors are logged to the
 `artwork_indexer.event_failure_reason` table (in addition to stderr and
 Sentry, if the latter is configured).
 
-Succesful events (marked as `completed`) are kept for 90 days before they
+Successful events (marked as `completed`) are kept for 90 days before they
 are cleaned up.
