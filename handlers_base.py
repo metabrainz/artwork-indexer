@@ -19,7 +19,7 @@
 import logging
 import json
 import time
-
+import requests
 from psycopg import sql
 from requests.exceptions import HTTPError
 from textwrap import dedent
@@ -421,3 +421,17 @@ class MusicBrainzEventHandler(EventHandler):
             ),
             {'gid': mbid},
         ).fetchall()
+    
+    def check_ia_capacity(self):
+        if self.entity_type == 'release':
+            key = self.config.get('s3', 'caa_access')
+        else:
+            key = self.config.get('s3', 'eaa_access')
+        
+        try:
+            url = f"https://s3.us.archive.org/?check_limit=1&accesskey={key}"
+            response = requests.get(url, timeout=10)
+            data = response.json()
+            return not data.get('over_limit', False)
+        except:
+            return True #proceed anyway if check fails

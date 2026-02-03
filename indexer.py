@@ -208,6 +208,20 @@ def get_next_event(pg_conn):
 
 
 def run_event_handler(pg_conn, event, handler):
+
+    if event['action'] in ['index', 'copy_image', 'delete_image', 'deindex']:
+        if not handler.check_ia_capacity():
+            logging.info('IA overloaded, deferring event %s', event['id'])
+
+            pg_conn.execute_with_retry(dedent('''
+                UPDATE artwork_indexer.event_queue
+                SET state = 'queued',
+                    attempts = attempts - 1
+                WHERE id = %(event_id)s
+            '''), {'event_id': event['id']})
+            time.sleep(30)  #wait as IA is over limit
+            return  
+        
     handler_method = getattr(handler, event['action'])
     try:
         handler_method(pg_conn, event)
@@ -231,7 +245,8 @@ def indexer(
     maxwait,
     max_idle_loops=inf,
     http_client_cls=requests.Session
-):
+):  
+
     sleep_amount = 1  # seconds
 
     http_session = http_client_cls()
