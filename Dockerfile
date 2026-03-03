@@ -17,8 +17,8 @@ RUN chown art:art /home/art/artwork-indexer && \
     # Explicit references to /usr/local/bin/python are used in case the
     # Ubuntu-packaged Python 3.10 is temporarily installed via
     # build-essential.
-    sudo -E -H -u art /usr/local/bin/python -m pip install --user --no-warn-script-location 'pipx==1.7.1' && \
-    sudo -E -H -u art env PATH="/home/art/.local/bin:$PATH" pipx install --python /usr/local/bin/python 'poetry==2.1.3' && \
+    sudo -E -H -u art /usr/local/bin/python -m pip install --user --no-warn-script-location 'pipx==1.8.0' && \
+    sudo -E -H -u art env PATH="/home/art/.local/bin:$PATH" pipx install --python /usr/local/bin/python 'poetry==2.3.2' && \
     sudo -E -H -u art env PATH="/home/art/.local/bin:$PATH" poetry install && \
     # apt-get purge --auto-remove -y build-essential && \
     rm -rf /var/lib/apt/lists/*
