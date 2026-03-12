@@ -380,34 +380,34 @@ for project in PROJECTS:
         -- We drop the triggers first to simulate "CREATE OR REPLACE,"
         -- which isn't implemented for "CREATE TRIGGER."
 
-        DROP TRIGGER IF EXISTS artwork_indexer_a_ins_{art_table} ON {art_schema}.{art_table};
+        DROP TRIGGER IF EXISTS artwork_indexer_a_ins_{art_table} ON {q_art_table};
 
         CREATE TRIGGER artwork_indexer_a_ins_{art_table} AFTER INSERT
-            ON {art_schema}.{art_table} FOR EACH ROW
+            ON {q_art_table} FOR EACH ROW
             EXECUTE PROCEDURE artwork_indexer.a_ins_{art_table}();
 
-        DROP TRIGGER IF EXISTS artwork_indexer_b_upd_{art_table} ON {art_schema}.{art_table};
+        DROP TRIGGER IF EXISTS artwork_indexer_b_upd_{art_table} ON {q_art_table};
 
         CREATE TRIGGER artwork_indexer_b_upd_{art_table} BEFORE UPDATE
-            ON {art_schema}.{art_table} FOR EACH ROW
+            ON {q_art_table} FOR EACH ROW
             EXECUTE PROCEDURE artwork_indexer.b_upd_{art_table}();
 
-        DROP TRIGGER IF EXISTS artwork_indexer_b_del_{art_table} ON {art_schema}.{art_table};
+        DROP TRIGGER IF EXISTS artwork_indexer_b_del_{art_table} ON {q_art_table};
 
         CREATE TRIGGER artwork_indexer_b_del_{art_table} BEFORE DELETE
-            ON {art_schema}.{art_table} FOR EACH ROW
+            ON {q_art_table} FOR EACH ROW
             EXECUTE PROCEDURE artwork_indexer.b_del_{art_table}();
 
-        DROP TRIGGER IF EXISTS artwork_indexer_a_ins_{art_table}_type ON {art_schema}.{art_table}_type;
+        DROP TRIGGER IF EXISTS artwork_indexer_a_ins_{art_table}_type ON {q_art_table}_type;
 
         CREATE TRIGGER artwork_indexer_a_ins_{art_table}_type AFTER INSERT
-            ON {art_schema}.{art_table}_type FOR EACH ROW
+            ON {q_art_table}_type FOR EACH ROW
             EXECUTE PROCEDURE artwork_indexer.a_ins_{art_table}_type();
 
-        DROP TRIGGER IF EXISTS artwork_indexer_b_del_{art_table}_type ON {art_schema}.{art_table}_type;
+        DROP TRIGGER IF EXISTS artwork_indexer_b_del_{art_table}_type ON {q_art_table}_type;
 
         CREATE TRIGGER artwork_indexer_b_del_{art_table}_type BEFORE DELETE
-            ON {art_schema}.{art_table}_type FOR EACH ROW
+            ON {q_art_table}_type FOR EACH ROW
             EXECUTE PROCEDURE artwork_indexer.b_del_{art_table}_type();
 
         DROP TRIGGER IF EXISTS artwork_indexer_b_del_{entity_table} ON {entity_schema}.{entity_table};
