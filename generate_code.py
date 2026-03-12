@@ -410,10 +410,10 @@ for project in PROJECTS:
             ON {q_art_table}_type FOR EACH ROW
             EXECUTE PROCEDURE artwork_indexer.b_del_{art_table}_type();
 
-        DROP TRIGGER IF EXISTS artwork_indexer_b_del_{entity_table} ON {entity_schema}.{entity_table};
+        DROP TRIGGER IF EXISTS artwork_indexer_b_del_{entity_table} ON {q_entity_table};
 
         CREATE TRIGGER artwork_indexer_b_del_{entity_table} BEFORE DELETE
-            ON {entity_schema}.{entity_table} FOR EACH ROW
+            ON {q_entity_table} FOR EACH ROW
             EXECUTE PROCEDURE artwork_indexer.b_del_{entity_table}();
         ''')
 
