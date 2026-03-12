@@ -32,10 +32,6 @@ IMAGE_FILE_FORMAT = '{bucket}-{id}.{suffix}'
 REQUEST_TIMEOUT = (10, 30)
 
 
-def kebab(s):
-    return s.replace('_', '-')
-
-
 class EventHandler:
 
     image_url_format = 'https://{domain}/{subpath}/{gid}/{id}{size}.{suffix}'
@@ -56,6 +52,10 @@ class EventHandler:
 
     @property
     def entity_type(self):
+        raise NotImplementedError
+
+    @property
+    def entity_type_kebab(self):
         raise NotImplementedError
 
     # Acts as a bucket & image filename prefix.
@@ -96,7 +96,7 @@ class EventHandler:
     def build_image_url(self, gid, artwork_id, size, suffix):
         return EventHandler.image_url_format.format(
             domain=self.domain,
-            subpath=self.entity_type,
+            subpath=self.entity_type_kebab,
             gid=gid,
             id=artwork_id,
             size=(('-%s' % size) if size is not None else ''),
@@ -129,7 +129,7 @@ class EventHandler:
                 self.build_image_json(gid, row)
                 for row in self.fetch_image_rows(pg_conn, gid)
             ],
-            kebab(self.entity_type): self.build_canonical_entity_url(gid),
+            self.entity_type_kebab: self.build_canonical_entity_url(gid),
         }, sort_keys=True)
 
         logging.debug('Produced %s', index_json_content)
@@ -357,7 +357,7 @@ class MusicBrainzEventHandler(EventHandler):
 
     def build_canonical_entity_url(self, gid):
         return 'https://musicbrainz.org/{entity}/{gid}'.format(
-            entity=kebab(self.entity_type),
+            entity=self.entity_type_kebab,
             gid=gid,
         )
 
@@ -390,7 +390,7 @@ class MusicBrainzEventHandler(EventHandler):
     def build_metadata_url(self, gid):
         mb_url = urllib.parse.urlparse(self.config['musicbrainz']['url'])
         xmlws_path = '/ws/2/{entity}/{gid}?inc={inc}'.format(
-            entity=kebab(self.entity_type),
+            entity=self.entity_type_kebab,
             gid=gid,
             inc=self.ws_inc_params,
         )

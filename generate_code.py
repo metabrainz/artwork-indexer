@@ -54,6 +54,7 @@ for project in PROJECTS:
     entity_schema = project['entity_schema']
     entity_table = project['entity_table']
     entity_type = entity_table
+    entity_type_kebab = entity_type.replace('_', '-')
 
     # q = qualified
     q_art_table = f'{art_schema}.{art_table}'
@@ -437,6 +438,10 @@ for project in PROJECTS:
             @property
             def entity_type(self):
                 return '{entity_type}'
+
+            @property
+            def entity_type_kebab(self):
+                return '{entity_type_kebab}'
 
             @property
             def ia_collection(self):

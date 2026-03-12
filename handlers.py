@@ -18,6 +18,10 @@ class ReleaseEventHandler(MusicBrainzEventHandler):
         return 'release'
 
     @property
+    def entity_type_kebab(self):
+        return 'release'
+
+    @property
     def ia_collection(self):
         return 'coverartarchive'
 
@@ -42,6 +46,10 @@ class EventEventHandler(MusicBrainzEventHandler):
 
     @property
     def entity_type(self):
+        return 'event'
+
+    @property
+    def entity_type_kebab(self):
         return 'event'
 
     @property
