@@ -387,7 +387,7 @@ def main():
 
     def reload_configuration(signum, frame):
         logging.info('Got SIGHUP, reloading configuration')
-        config.read('config.ini')
+        config.read(args.config)
 
     signal.signal(signal.SIGHUP, reload_configuration)
 
